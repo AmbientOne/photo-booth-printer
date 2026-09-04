@@ -488,6 +488,7 @@
       </div>
 
       <div class="row" style="margin-top:8px">
+        <button class="btn ghost" id="gallery-btn" type="button" style="display:none">Tonight's Photos</button>
         <button class="btn ghost" id="setup-cancel" type="button">Cancel</button>
         <button class="btn gold" id="setup-save" type="button">Save &amp; Start</button>
       </div>
@@ -509,7 +510,6 @@
         <span class="chev">›</span>
       </button>
     </div>
-    <button class="btn gallery-btn exp" id="gallery-btn" type="button" style="display:none">Gallery</button>
     <div class="foot"><span class="tagline" id="home-tagline"></span><span class="diamond">◆</span></div>
     </div>
   </section>
@@ -790,6 +790,7 @@
   var logoImg = null, overlayImg = null;
   var pendingLogo = null, pendingOverlay = null;
   var idleTimer = null;
+  var galleryReturn = "home";
 
   function show(name) {
     Object.keys(screens).forEach(function (k) {
@@ -807,14 +808,20 @@
   }
 
   // ---------- Idle / attract ----------
+  // Between guests the booth should be showing an invitation, not the last
+  // person's photo. Short, because a strip left on screen is a strip the next
+  // guest has to dismiss before they realise it is their turn.
+  var IDLE_MS = 15000;
   function resetIdle() {
     clearTimeout(idleTimer);
-    if (!(EXPERIMENTAL && CONFIG && CONFIG.attract)) return;
+    if (!(CONFIG && CONFIG.attract !== false)) return;
     idleTimer = setTimeout(function () {
+      // Never interrupt someone mid-shoot, or the host in settings.
+      if (capturing) { resetIdle(); return; }
       if (screens.camera.classList.contains("active")) { resetIdle(); return; }
       if (screens.setup.classList.contains("active")) { resetIdle(); return; }
       show("attract");
-    }, 60000);
+    }, IDLE_MS);
   }
   ["click", "touchstart", "keydown"].forEach(function (ev) {
     document.addEventListener(ev, resetIdle, { passive: true });
@@ -823,8 +830,10 @@
 
   function renderAttract() {
     var c = CONFIG || DEFAULTS;
-    $("#attract-title").textContent = c.title;
-    $("#attract-venue").textContent = c.venue;
+    // Same rule as everywhere else: a blank field leaves no trace, and an
+    // unnamed event still needs something on the idle screen.
+    $("#attract-title").textContent = (c.title || "").trim() || "Photo Booth";
+    $("#attract-venue").textContent = (c.venue || "").trim();
   }
 
   // ---------- Home rendering ----------
@@ -1148,7 +1157,10 @@
       startCamera();
     });
   });
-  $("#gallery-btn").addEventListener("click", openGallery);
+  $("#gallery-btn").addEventListener("click", function () {
+    galleryReturn = "setup";
+    openGallery();
+  });
   $("#cam-back").addEventListener("click", function () { show("home"); });
   $("#cam-flip").addEventListener("click", function () {
     facing = facing === "user" ? "environment" : "user";
@@ -1749,9 +1761,13 @@
 
   // ---------- Gallery ----------
   function updateGalleryBtn() {
+    // Lives in the settings panel, behind the PIN. Guests should not be
+    // browsing everyone else's photos from the home screen.
     var b = $("#gallery-btn");
-    if (sessionPhotos.length > 0) { b.style.display = ""; b.textContent = "Gallery (" + sessionPhotos.length + ")"; }
-    else b.style.display = "none";
+    if (sessionPhotos.length > 0) {
+      b.style.display = "";
+      b.textContent = "Tonight's Photos (" + sessionPhotos.length + ")";
+    } else b.style.display = "none";
   }
   function openGallery() {
     var g = $("#gal-grid"); g.innerHTML = "";
@@ -1772,6 +1788,7 @@
     $("#resultImg").src = entry.url;
     $("#filters").style.display = "none";
     $("#r-save").style.display = "";      // host looking back through the night
+    galleryReturn = "gallery";            // Done goes back to the grid
     show("review");
   }
   $("#r-save").addEventListener("click", function () {
@@ -1779,7 +1796,7 @@
     downloadBlob(lastUrl, fileName(lastType));
     toast("Saved to Files");
   });
-  $("#gal-back").addEventListener("click", function () { show("home"); });
+  $("#gal-back").addEventListener("click", function () { show(galleryReturn || "home"); });
   $("#gal-saveall").addEventListener("click", function () {
     if (!sessionPhotos.length) return;
     // Safari asks once, then allows the rest. The stagger keeps it from
@@ -1798,7 +1815,7 @@
   renderHome();
   renderAttract();
   if (CONFIG) {
-    if (EXPERIMENTAL && CONFIG.attract) show("attract"); else show("home");
+    if (CONFIG.attract !== false) show("attract"); else show("home");
   } else openSetup();
   window.addEventListener("pagehide", stopCamera);
 })();
