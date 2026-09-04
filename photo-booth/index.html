@@ -349,6 +349,8 @@
         <div class="cfield"><span>Accent</span><input id="f-accent" type="color" /></div>
         <div class="cfield"><span>Background</span><input id="f-bg" type="color" /></div>
         <div class="cfield"><span>Frame</span><input id="f-card" type="color" /></div>
+        <div class="cfield"><span>Title text</span><input id="f-titlecolor" type="color" /></div>
+        <div class="cfield"><span>Venue text</span><input id="f-venuecolor" type="color" /></div>
         <div class="cfield"><span>Date text</span><input id="f-datecolor" type="color" /></div>
       </div></div>
       <div class="field"><label>Setup Code</label><input id="f-pin" type="tel" inputmode="numeric" maxlength="6" placeholder="4-digit code" /></div>
@@ -583,6 +585,8 @@
     bg: "#0c0b0a",
     card: "#fdfbf5",
     pin: "1234",
+    titleColor: "#1a1814",
+    venueColor: "#c9a24b",
     dateColor: "#8a8a8a",
     logo: null,
     overlay: null,
@@ -837,6 +841,10 @@
       b.style.boxShadow = "inset 0 0 0 2px " + p.card;
       b.addEventListener("click", function () {
         $("#f-accent").value = p.accent; $("#f-bg").value = p.bg; $("#f-card").value = p.card;
+        var pt = buildTheme(p);
+        $("#f-titlecolor").value = pt.ink;
+        $("#f-venuecolor").value = pt.accent;
+        $("#f-datecolor").value = DEFAULTS.dateColor;
         previewTheme();
       });
       wrap.appendChild(b);
@@ -872,7 +880,7 @@
       // Shot count lives in two places; keep them in step.
       if (id === "#seg-shots-main") setSeg("#seg-shots", b.getAttribute("data-val"));
       if (id === "#seg-shots") setSeg("#seg-shots-main", b.getAttribute("data-val"));
-      renderStripPreview();
+      ensureFonts(renderStripPreview, getSeg("#seg-font"));
     });
   });
 
@@ -915,15 +923,16 @@
       title: $("#f-title").value || DEFAULTS.title,
       venue: $("#f-venue").value || DEFAULTS.venue,
       date: $("#f-date").value || DEFAULTS.date,
-      dateColor: $("#f-datecolor").value || DEFAULTS.dateColor
+      font: getSeg("#seg-font") || DEFAULTS.font,
+      titleColor: $("#f-titlecolor").value || DEFAULTS.titleColor,
+      venueColor: $("#f-venuecolor").value || DEFAULTS.venueColor,
+      dateColor: $("#f-datecolor").value || DEFAULTS.dateColor,
+      stripStyle: "strip"          // the preview always shows the strip
     };
-    var saveStyle = CONFIG && CONFIG.stripStyle;
-    if (CONFIG) CONFIG.stripStyle = "strip";   // always preview the strip
     var full;
     try {
       full = renderStrip(placeholderShots(n), designFromForm());
     } finally {
-      if (CONFIG) CONFIG.stripStyle = saveStyle;
       previewText = null;
     }
     var ctx = cv.getContext("2d");
@@ -992,6 +1001,8 @@
     $("#f-accent").value = c.accent || DEFAULTS.accent;
     $("#f-bg").value = c.bg || DEFAULTS.bg;
     $("#f-card").value = c.card || DEFAULTS.card;
+    $("#f-titlecolor").value = c.titleColor || DEFAULTS.titleColor;
+    $("#f-venuecolor").value = c.venueColor || DEFAULTS.venueColor;
     $("#f-datecolor").value = c.dateColor || DEFAULTS.dateColor;
     $("#f-pin").value = c.pin || DEFAULTS.pin;
     markSelectedPreset();
@@ -1014,7 +1025,7 @@
     show("setup");
     ensureFonts(renderStripPreview);
   }
-  ["#f-accent", "#f-bg", "#f-card", "#f-datecolor"].forEach(function (sel) {
+  ["#f-accent", "#f-bg", "#f-card", "#f-titlecolor", "#f-venuecolor", "#f-datecolor"].forEach(function (sel) {
     $(sel).addEventListener("input", previewTheme);
   });
   $("#setup-save").addEventListener("click", function () {
@@ -1025,6 +1036,8 @@
       date: ($("#f-date").value || DEFAULTS.date).trim(),
       tagline: ($("#f-tagline").value || DEFAULTS.tagline).trim(),
       accent: $("#f-accent").value, bg: $("#f-bg").value, card: $("#f-card").value,
+      titleColor: $("#f-titlecolor").value,
+      venueColor: $("#f-venuecolor").value,
       dateColor: $("#f-datecolor").value,
       pin: pin,
       logo: pendingLogo, overlay: pendingOverlay,
@@ -1179,9 +1192,12 @@
     });
   }
 
-  function ensureFonts(cb) {
+  function ensureFonts(cb, famOverride) {
     if (!document.fonts || !document.fonts.load) { cb(); return; }
-    var fam = (CONFIG && CONFIG.font) || "Playfair Display";
+    // famOverride lets the setup preview load the font being chosen rather
+    // than the one last saved. Without it the canvas silently falls back to a
+    // generic serif and the picker looks broken.
+    var fam = famOverride || (CONFIG && CONFIG.font) || "Playfair Display";
     try {
       Promise.all([
         document.fonts.load("italic 600 52px '" + fam + "'"),
@@ -1291,9 +1307,11 @@
     var gold = onDark ? theme.accentSoft : theme.accent;
     var ink = onDark ? "#ffffff" : theme.ink;
     var gray = onDark ? "rgba(255,255,255,0.78)" : theme.cardGray;
-    var fam = (CONFIG && CONFIG.font) || "Playfair Display";
+    var fam = fconf("font") || "Playfair Display";
     var y = top, halfLine = 150 * scale, gap = 26 * scale;
-    var dateInk = fconf("dateColor") || gray;
+    var titleInk = onDark ? "#ffffff" : (fconf("titleColor") || ink);
+    var venueInk = onDark ? theme.accentSoft : (fconf("venueColor") || gold);
+    var dateInk = onDark ? "rgba(255,255,255,0.78)" : (fconf("dateColor") || gray);
     if (!ftext("title") && !ftext("venue") && !ftext("date")) return;
     ctx.strokeStyle = gold; ctx.lineWidth = 1.4 * scale;
     ctx.beginPath(); ctx.moveTo(cx - halfLine, y); ctx.lineTo(cx - gap, y); ctx.stroke();
@@ -1304,12 +1322,12 @@
     // gap behind, so the date floated away from the title with a hole above it.
     var lines = [];
     if (ftext("title")) lines.push({
-      text: ftext("title"), fill: ink, step: 42,
+      text: ftext("title"), fill: titleInk, step: 42,
       font: "italic 600 " + (52 * scale) + "px '" + fam + "', Georgia, serif"
     });
     if (mode !== "compact") {
       if (ftext("venue")) lines.push({
-        text: ftext("venue"), fill: gold, step: 36,
+        text: ftext("venue"), fill: venueInk, step: 36,
         font: "italic 500 " + (30 * scale) + "px '" + fam + "', Georgia, serif"
       });
       if (ftext("date")) lines.push({
@@ -1378,7 +1396,7 @@
   // Exactly 2x6 at 600dpi. The canvas ratio is pinned, and photo height is
   // derived from whatever space is left, so any shot count fits with no crop.
   function renderStrip(imgs, designOver) {
-    if ((CONFIG && CONFIG.stripStyle) === "grid") return renderGrid(imgs);
+    if (fconf("stripStyle") === "grid") return renderGrid(imgs);
     var W = 1200, H = 3600;
     var k = W / 700;                       // design was authored 700px wide
     var d = stripDesign(designOver);
