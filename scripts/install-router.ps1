@@ -74,10 +74,16 @@ $py = (Get-Command py -EA SilentlyContinue).Source
 if (-not $py) { $py = (Get-Command python -EA SilentlyContinue).Source }
 if (-not $py) { throw "Python not found. Install it for all users from python.org." }
 
-if ($py -like "$env:SystemDrive\Users\*") {
-    Write-Warning "Python is a per-user install: $py"
-    Write-Warning "SYSTEM cannot run it, so the boot task will not work."
-    Write-Warning "Reinstall Python with Install for all users ticked, then rerun this."
+$pyBad = ($py -like "$env:SystemDrive\Users\*") -or ($py -like "*\WindowsApps\*")
+if ($pyBad) {
+    Write-Warning "Python is not usable by the SYSTEM account: $py"
+    if ($py -like "*\WindowsApps\*") {
+        Write-Warning "That is the Microsoft Store build. Its files live under"
+        Write-Warning "C:\Program Files\WindowsApps, which is locked down and not"
+        Write-Warning "runnable by SYSTEM."
+    }
+    Write-Warning "Install Python from python.org, elevated, with Install for all"
+    Write-Warning "users ticked, then reinstall requirements.txt elevated and rerun this."
 } else {
     Write-Host "      $py"
 }
@@ -135,6 +141,33 @@ Register-ScheduledTask -TaskName "PhotoBooth Print Server" -Force `
     -Trigger $trigger `
     -Action (New-ScheduledTaskAction -Execute $py -Argument "app.py" -WorkingDirectory $ServerDir) | Out-Null
 Write-Host "      PhotoBooth Print Server runs as SYSTEM, 20s after boot."
+
+Write-Host ""
+Write-Host "      Proving SYSTEM can actually run it..."
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" -EA SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*app.py*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }
+Start-Sleep -Seconds 2
+
+Start-ScheduledTask -TaskName "PhotoBooth Print Server"
+$ok = $false
+$deadline = (Get-Date).AddSeconds(40)
+while ((Get-Date) -lt $deadline) {
+    try {
+        $probe = Invoke-RestMethod -Uri "http://127.0.0.1:5000/status" -TimeoutSec 3
+        if ($probe) { $ok = $true; break }
+    } catch { Start-Sleep -Milliseconds 750 }
+}
+
+if ($ok) {
+    Write-Host "      Confirmed: the server answered on port 5000." -ForegroundColor Green
+} else {
+    Write-Warning "The task ran but the server never answered."
+    Write-Warning "Almost always Python not being reachable by SYSTEM. Check:"
+    Write-Warning "  Get-ScheduledTaskInfo -TaskName 'PhotoBooth Print Server'"
+    Write-Warning "A LastTaskResult of 267011 means it is still running; 2147942402"
+    Write-Warning "means the executable could not be found by SYSTEM."
+}
 
 # --- what is left for a human ---------------------------------------------
 Write-Host ""
