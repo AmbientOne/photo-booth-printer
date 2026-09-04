@@ -809,9 +809,9 @@
 
   // ---------- Idle / attract ----------
   // Between guests the booth should be showing an invitation, not the last
-  // person's photo. Short, because a strip left on screen is a strip the next
-  // guest has to dismiss before they realise it is their turn.
-  var IDLE_MS = 15000;
+  // person's photo. Long enough that someone admiring their strip is not
+  // bumped away mid-look; any tap resets it.
+  var IDLE_MS = 30000;
   function resetIdle() {
     clearTimeout(idleTimer);
     if (!(CONFIG && CONFIG.attract !== false)) return;
