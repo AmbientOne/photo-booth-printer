@@ -906,7 +906,8 @@
     previewText = {
       title: $("#f-title").value || DEFAULTS.title,
       venue: $("#f-venue").value || DEFAULTS.venue,
-      date: $("#f-date").value || DEFAULTS.date
+      date: $("#f-date").value || DEFAULTS.date,
+      dateColor: $("#f-datecolor").value || DEFAULTS.dateColor
     };
     var saveStyle = CONFIG && CONFIG.stripStyle;
     if (CONFIG) CONFIG.stripStyle = "strip";   // always preview the strip
@@ -1267,6 +1268,13 @@
     var src = previewText || CONFIG || DEFAULTS;
     return (src[key] || "").trim();
   }
+  // Same lookup for settings that are not text, so the live preview reflects a
+  // picker being dragged rather than only what was last saved.
+  function fconf(key) {
+    var src = previewText || CONFIG || DEFAULTS;
+    var v = src[key];
+    return (v === undefined || v === null || v === "") ? DEFAULTS[key] : v;
+  }
 
   // mode: "full" (title + venue + date), "compact" (title only).
   function drawFooter(ctx, cx, top, scale, onDark, mode) {
@@ -1277,7 +1285,7 @@
     var gray = onDark ? "rgba(255,255,255,0.78)" : theme.cardGray;
     var fam = (CONFIG && CONFIG.font) || "Playfair Display";
     var y = top, halfLine = 150 * scale, gap = 26 * scale;
-    var dateInk = (CONFIG && CONFIG.dateColor) || DEFAULTS.dateColor || gray;
+    var dateInk = fconf("dateColor") || gray;
     if (!ftext("title") && !ftext("venue") && !ftext("date")) return;
     ctx.strokeStyle = gold; ctx.lineWidth = 1.4 * scale;
     ctx.beginPath(); ctx.moveTo(cx - halfLine, y); ctx.lineTo(cx - gap, y); ctx.stroke();
