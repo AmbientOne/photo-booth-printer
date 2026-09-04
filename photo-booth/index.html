@@ -444,6 +444,9 @@
             <button type="button" data-val="DM Serif Display" style="font-family:'DM Serif Display',serif">DM Serif</button>
             <button type="button" data-val="Bodoni Moda" style="font-family:'Bodoni Moda',serif">Bodoni</button>
             <button type="button" data-val="Great Vibes" style="font-family:'Great Vibes',cursive">Great Vibes</button>
+            <button type="button" data-val="Snell Roundhand" style="font-family:'Snell Roundhand','Savoye LET',cursive">Snell</button>
+            <button type="button" data-val="Didot" style="font-family:'Didot','Bodoni 72',serif">Didot</button>
+            <button type="button" data-val="Hoefler Text" style="font-family:'Hoefler Text',Georgia,serif">Hoefler</button>
           </div>
         </div>
         <div class="field"><div class="switch"><span>Attract / idle screen</span><button type="button" class="toggle" id="tg-attract"></button></div></div>
@@ -1214,10 +1217,25 @@
     "Cormorant Garamond": { title: 600, venue: 600, italic: true },
     "DM Serif Display":   { title: 400, venue: 400, italic: true },
     "Bodoni Moda":        { title: 600, venue: 600, italic: true },
-    "Great Vibes":        { title: 400, venue: 400, italic: false }
+    "Great Vibes":        { title: 400, venue: 400, italic: false },
+    // Built into iOS. Nothing to download, so canvas can always use them --
+    // which is the whole point: a webfont that Safari refuses to hand to
+    // canvas is indistinguishable from a broken picker, and no amount of
+    // preloading has fixed it on the device.
+    "Snell Roundhand":    { title: 400, venue: 400, italic: false, system: true,
+                            stack: "'Snell Roundhand', 'Savoye LET', cursive" },
+    "Didot":              { title: 400, venue: 400, italic: true,  system: true,
+                            stack: "'Didot', 'Bodoni 72', Georgia, serif" },
+    "Hoefler Text":       { title: 400, venue: 400, italic: true,  system: true,
+                            stack: "'Hoefler Text', Georgia, serif" }
   };
   function fontFace(fam) {
     return FONT_FACES[fam] || FONT_FACES["Playfair Display"];
+  }
+  function fontString(fam, weight, px) {
+    var face = fontFace(fam);
+    var stack = face.stack || ("'" + fam + "', Georgia, serif");
+    return (face.italic ? "italic " : "") + weight + " " + px + "px " + stack;
   }
 
   function ensureFonts(cb, famOverride) {
@@ -1233,6 +1251,8 @@
     // loaded programmatically; the face has to have laid out real DOM text
     // first. The picker buttons do that, but they are hidden while shooting,
     // which is why the print came out in a fallback serif.
+    if (face.system) { cb(); return; }   // already present; nothing to load
+
     var probe = document.getElementById("font-probe");
     if (probe) {
       probe.style.fontFamily = "'" + fam + "', Georgia, serif";
@@ -1359,7 +1379,6 @@
     var gray = onDark ? "rgba(255,255,255,0.78)" : theme.cardGray;
     var fam = fconf("font") || "Playfair Display";
     var face = fontFace(fam);
-    var fit = face.italic ? "italic " : "";
     var y = top, halfLine = 150 * scale, gap = 26 * scale;
     var titleInk = onDark ? "#ffffff" : (fconf("titleColor") || ink);
     var venueInk = onDark ? theme.accentSoft : (fconf("venueColor") || gold);
@@ -1375,12 +1394,12 @@
     var lines = [];
     if (ftext("title")) lines.push({
       text: ftext("title"), fill: titleInk, step: 42,
-      font: fit + face.title + " " + (52 * scale) + "px '" + fam + "', Georgia, serif"
+      font: fontString(fam, face.title, 52 * scale)
     });
     if (mode !== "compact") {
       if (ftext("venue")) lines.push({
         text: ftext("venue"), fill: venueInk, step: 36,
-        font: fit + face.venue + " " + (30 * scale) + "px '" + fam + "', Georgia, serif"
+        font: fontString(fam, face.venue, 30 * scale)
       });
       if (ftext("date")) lines.push({
         text: ftext("date"), fill: dateInk, step: 34,

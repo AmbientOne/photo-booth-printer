@@ -58,9 +58,12 @@ function fontFacesTable() {
   assert.ok(block, "FONT_FACES table not found");
   const table = {};
   for (const m of block[1].matchAll(
-    /"([^"]+)":\s*\{\s*title:\s*(\d+),\s*venue:\s*(\d+),\s*italic:\s*(true|false)\s*\}/g
+    /"([^"]+)":\s*\{\s*title:\s*(\d+),\s*venue:\s*(\d+),\s*italic:\s*(true|false)([^}]*)\}/g
   )) {
-    table[m[1]] = { title: +m[2], venue: +m[3], italic: m[4] === "true" };
+    table[m[1]] = {
+      title: +m[2], venue: +m[3], italic: m[4] === "true",
+      system: /system:\s*true/.test(m[5] || "")
+    };
   }
   return table;
 }
@@ -80,6 +83,9 @@ test("every FONT_FACES weight is actually loaded by the stylesheet", () => {
   const sheet = stylesheetFaces();
   const problems = [];
   for (const [fam, face] of Object.entries(table)) {
+    // Faces that ship with the OS are not downloaded, so the stylesheet has
+    // nothing to say about them.
+    if (face.system) continue;
     const loaded = sheet[fam];
     if (!loaded) { problems.push(fam + ": not requested in the stylesheet"); continue; }
     for (const [role, weight] of [["title", face.title], ["venue", face.venue]]) {
@@ -140,6 +146,20 @@ test("the font probe stays in the layout", () => {
   assert.doesNotMatch(css[1], /display:\s*none/, "display:none stops the face loading");
   assert.match(css[1], /position:\s*absolute/, "keep it off-screen but laid out");
   assert.match(SRC, /<span id="font-probe"/, "probe element missing from the page");
+});
+
+test("system faces carry their own fallback stack", () => {
+  const table = fontFacesTable();
+  const block = SRC.match(/var FONT_FACES = \{([\s\S]*?)\n  \};/)[1];
+  for (const [fam, face] of Object.entries(table)) {
+    if (!face.system) continue;
+    const entry = block.split('"' + fam + '"')[1] || "";
+    assert.match(
+      entry.split("},")[0], /stack:/,
+      fam + " is a system face and needs an explicit stack, or an iPad " +
+      "without it falls back to a generic serif with no second choice"
+    );
+  }
 });
 
 test("the strip preview has enough resolution to show a border", () => {
