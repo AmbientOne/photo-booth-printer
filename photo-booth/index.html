@@ -396,7 +396,7 @@
             </div>
           </div>
           <div class="sd-preview">
-            <canvas id="strip-preview" width="200" height="600"></canvas>
+            <canvas id="strip-preview" width="480" height="1440"></canvas>
             <p class="sublabel">Live preview · dashed line is the printer's trim edge</p>
           </div>
         </div>
@@ -1192,15 +1192,33 @@
     });
   }
 
+  // The stylesheet requests specific weights per family. Asking canvas for a
+  // face that was never loaded makes it fall back to a generic serif, which
+  // looks exactly like the font picker doing nothing -- and did, for every
+  // family except Playfair.
+  var FONT_FACES = {
+    "Playfair Display":   { title: 600, venue: 500, italic: true },
+    "Cormorant Garamond": { title: 600, venue: 600, italic: true },
+    "DM Serif Display":   { title: 400, venue: 400, italic: true },
+    "Bodoni Moda":        { title: 600, venue: 600, italic: true },
+    "Great Vibes":        { title: 400, venue: 400, italic: false }
+  };
+  function fontFace(fam) {
+    return FONT_FACES[fam] || FONT_FACES["Playfair Display"];
+  }
+
   function ensureFonts(cb, famOverride) {
     if (!document.fonts || !document.fonts.load) { cb(); return; }
     // famOverride lets the setup preview load the font being chosen rather
     // than the one last saved. Without it the canvas silently falls back to a
     // generic serif and the picker looks broken.
     var fam = famOverride || (CONFIG && CONFIG.font) || "Playfair Display";
+    var face = fontFace(fam);
+    var it = face.italic ? "italic " : "";
     try {
       Promise.all([
-        document.fonts.load("italic 600 52px '" + fam + "'"),
+        document.fonts.load(it + face.title + " 52px '" + fam + "'"),
+        document.fonts.load(it + face.venue + " 30px '" + fam + "'"),
         document.fonts.load("400 22px 'Jost'")
       ]).then(function () { cb(); }, function () { cb(); });
     } catch (e) { cb(); }
@@ -1308,6 +1326,8 @@
     var ink = onDark ? "#ffffff" : theme.ink;
     var gray = onDark ? "rgba(255,255,255,0.78)" : theme.cardGray;
     var fam = fconf("font") || "Playfair Display";
+    var face = fontFace(fam);
+    var fit = face.italic ? "italic " : "";
     var y = top, halfLine = 150 * scale, gap = 26 * scale;
     var titleInk = onDark ? "#ffffff" : (fconf("titleColor") || ink);
     var venueInk = onDark ? theme.accentSoft : (fconf("venueColor") || gold);
@@ -1323,12 +1343,12 @@
     var lines = [];
     if (ftext("title")) lines.push({
       text: ftext("title"), fill: titleInk, step: 42,
-      font: "italic 600 " + (52 * scale) + "px '" + fam + "', Georgia, serif"
+      font: fit + face.title + " " + (52 * scale) + "px '" + fam + "', Georgia, serif"
     });
     if (mode !== "compact") {
       if (ftext("venue")) lines.push({
         text: ftext("venue"), fill: venueInk, step: 36,
-        font: "italic 500 " + (30 * scale) + "px '" + fam + "', Georgia, serif"
+        font: fit + face.venue + " " + (30 * scale) + "px '" + fam + "', Georgia, serif"
       });
       if (ftext("date")) lines.push({
         text: ftext("date"), fill: dateInk, step: 34,
