@@ -130,7 +130,7 @@ could be used to impersonate any website to that iPad.
 
 ```powershell
 cd C:\printer\scripts
-.\install.ps1 -Ssid "PhotoBooth" -Passphrase "choose-something-long" -EnableAutoLogon
+.\install.ps1 -Ssid "AP-02" -Passphrase "choose-something-long" -EnableAutoLogon
 ```
 
 This disables the hotspot's idle timeout, replaces Windows' overly broad
@@ -178,6 +178,24 @@ Once per iPad:
 
 Optional but worth it: turn on **Guided Access** (Settings → Accessibility) so
 guests can't leave the booth app.
+
+### Choosing the network name
+
+Do not call it "PhotoBooth", or anything else that announces what it is. Guests
+who see a booth-shaped network name will try to join it, and every attempt is
+someone asking you for a password during an event.
+
+Pick something that reads as unconfigured hardware and gets ignored:
+
+- the router's factory SSID, left exactly as it shipped
+- `GL-SFT1200-a4f`, `AP-02`, `Net-2G`, `TP-Link_5G`
+
+Better still, hide it entirely: **GL.iNet admin -> Wireless -> Hide SSID**. The
+iPad connects fine to a hidden network once the details are saved, and nobody
+else can see it exists.
+
+None of this is real security -- the passphrase is the actual lock, and it
+should be long. This is about not being noticed in the first place.
 
 ### Headless machines
 
