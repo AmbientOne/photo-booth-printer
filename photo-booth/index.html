@@ -190,6 +190,9 @@
   .btn.sm { padding: 10px 14px; font-size: 12px; letter-spacing: 0.16em; border-radius: 10px; gap: 7px; }
   .btn.sm svg { width: 15px; height: 15px; }
   .btn.quiet { border-color: transparent; background: transparent; color: var(--gray); }
+  /* Forces a webfont to become active before canvas asks for it. Must stay in
+     the layout: display:none would skip loading and defeat the purpose. */
+  #font-probe { position: absolute; left: -9999px; top: 0; font-size: 40px; line-height: 1; white-space: nowrap; pointer-events: none; }
   .row.nav { margin-top: 2px; }
   .row.nav .btn { flex: 0 1 auto; }
   .row.nav { justify-content: space-between; }
@@ -551,6 +554,7 @@
   </section>
 
   <div class="toast" id="toast"></div>
+  <span id="font-probe" aria-hidden="true"></span>
 
   <!-- PIN PAD -->
   <div class="pinpad" id="pinpad">
@@ -1224,12 +1228,31 @@
     var fam = famOverride || (CONFIG && CONFIG.font) || "Playfair Display";
     var face = fontFace(fam);
     var it = face.italic ? "italic " : "";
+
+    // iOS Safari will not reliably give canvas a webfont that has only been
+    // loaded programmatically; the face has to have laid out real DOM text
+    // first. The picker buttons do that, but they are hidden while shooting,
+    // which is why the print came out in a fallback serif.
+    var probe = document.getElementById("font-probe");
+    if (probe) {
+      probe.style.fontFamily = "'" + fam + "', Georgia, serif";
+      probe.style.fontWeight = String(face.title);
+      probe.style.fontStyle = face.italic ? "italic" : "normal";
+      probe.textContent = "Aa";
+    }
+
     try {
       Promise.all([
         document.fonts.load(it + face.title + " 52px '" + fam + "'"),
         document.fonts.load(it + face.venue + " 30px '" + fam + "'"),
         document.fonts.load("400 22px 'Jost'")
-      ]).then(function () { cb(); }, function () { cb(); });
+      ]).then(function () {
+        return document.fonts.ready;      // wait for activation, not just fetch
+      }).then(function () {
+        // One frame, so the newly active face is available to canvas.
+        if (window.requestAnimationFrame) window.requestAnimationFrame(function () { cb(); });
+        else cb();
+      }, function () { cb(); });
     } catch (e) { cb(); }
   }
 

@@ -124,6 +124,24 @@ test("ensureFonts loads both roles for the chosen family", () => {
   assert.match(body[0], /face\.venue/, "must load the venue face");
 });
 
+test("ensureFonts activates the face in the DOM, not just in the font set", () => {
+  const body = SRC.match(/\n  function ensureFonts\([^)]*\) \{[\s\S]*?\n  \}\n/);
+  assert.ok(body, "ensureFonts not found");
+  // iOS Safari hands canvas a fallback unless the face has laid out real DOM
+  // text, so a probe element and fonts.ready are both load bearing.
+  assert.match(body[0], /font-probe/, "must set the off-screen probe element");
+  assert.match(body[0], /document\.fonts\.ready/, "must wait for activation, not just the fetch");
+});
+
+test("the font probe stays in the layout", () => {
+  // display:none skips font loading entirely, which defeats the probe.
+  const css = SRC.match(/#font-probe \{([^}]*)\}/);
+  assert.ok(css, "#font-probe rule not found");
+  assert.doesNotMatch(css[1], /display:\s*none/, "display:none stops the face loading");
+  assert.match(css[1], /position:\s*absolute/, "keep it off-screen but laid out");
+  assert.match(SRC, /<span id="font-probe"/, "probe element missing from the page");
+});
+
 test("the strip preview has enough resolution to show a border", () => {
   const m = SRC.match(/<canvas id="strip-preview" width="(\d+)" height="(\d+)">/);
   assert.ok(m, "preview canvas not found");
