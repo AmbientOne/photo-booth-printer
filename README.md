@@ -22,6 +22,35 @@ The server never talks to the printer. It drops a JPEG into the folder DNP's
 Hot Folder Print utility watches, and HFP does the printing — which means a
 printer jam or an empty ribbon queues work rather than losing it.
 
+## Two ways to make the network
+
+The booth needs a private network that does not depend on the venue. There are
+two supported ways to get one, and the repo keeps both.
+
+| | **Hotspot** (`install.ps1`) | **Router** (`install-router.ps1`) |
+|---|---|---|
+| Wi-Fi comes from | the PC itself | a travel router |
+| Extra hardware | none | one router, ~25 GBP |
+| Address | fixed at `192.168.137.1` | you choose it |
+| Print server starts | at logon | **at boot, as SYSTEM** |
+| Needs auto logon | yes, for everything | only for Hot Folder Print |
+| Requires | an adapter that supports Wi-Fi Direct GO **and** an upstream connection to share | an ethernet port |
+
+**The hotspot path has a hard prerequisite that is easy to miss:** Windows
+Mobile Hotspot will not start unless the machine already has a connection to
+share, and the adapter has to support being a client and an access point at
+once. Check before committing to it:
+
+```powershell
+.\scripts\hotspot.ps1 -Check
+netsh wlan show wirelesscapabilities | findstr /i "P2P Concurrent"
+```
+
+`P2P GO ports count` must be at least 1 and `Number of Concurrent Channels
+Supported` at least 2. If either falls short, or the machine will be somewhere
+with no network to join, use the router path -- it removes the Wi-Fi adapter
+from the design completely.
+
 ## Layout
 
 | Path | What it is |
@@ -29,7 +58,11 @@ printer jam or an empty ribbon queues work rather than losing it.
 | `photo-booth/index.html` | The whole guest-facing app. Vanilla JS, no build, no backend. |
 | `print-server/app.py` | Flask app: `/print`, `/status`, `/cert`, `/booth`. |
 | `print-server/make_cert.py` | Generates the local root CA and server certificate. |
-| `scripts/` | Windows setup: hotspot, firewall, startup tasks, health check. |
+| `scripts/install.ps1` | Hotspot setup: logon tasks, firewall, auto logon. |
+| `scripts/install-router.ps1` | Router setup: boot task as SYSTEM, firewall, no hotspot. |
+| `scripts/hotspot.ps1` | Brings the access point up; `-Check` reports without changing anything. |
+| `scripts/start-booth.ps1` | One-click launcher for an attended machine. |
+| `scripts/status.ps1` | Health check; detects which setup is installed. |
 | `RUNBOOK.md` | Operator instructions and one-time machine setup. |
 | `SECURITY-CLEANUP.md` | How to undo everything on the PC and the iPad. |
 
