@@ -407,13 +407,6 @@
           </div>
           <p class="sublabel">Transparent PNG sized to the card; drawn over the whole photo.</p>
         </div>
-        <div class="field"><label>Single Layout</label>
-          <div class="seg" id="seg-layout">
-            <button type="button" data-val="polaroid">Polaroid</button>
-            <button type="button" data-val="fullbleed">Full bleed</button>
-            <button type="button" data-val="filmborder">Film border</button>
-          </div>
-        </div>
         <div class="field"><label>Strip Style</label>
           <div class="seg" id="seg-stripstyle">
             <button type="button" data-val="strip">Strip</button>
@@ -456,12 +449,6 @@
     <h1 class="title serif" id="home-title">510 &amp; Park</h1>
     <div class="sub kicker"><span id="home-venue">Play2WinSocial</span><span class="dot">·</span>Photo Booth</div>
     <div class="cards">
-      <button class="mode-card" data-mode="single" type="button">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></span>
-        <div><h3>Single Shot</h3><p>One photo with the event overlay — perfect for sharing</p></div>
-        <span class="chev">›</span>
-      </button>
-      <div class="or">OR</div>
       <button class="mode-card" data-mode="strip" type="button">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="3" width="12" height="4.2" rx="1"/><rect x="6" y="9.9" width="12" height="4.2" rx="1"/><rect x="6" y="16.8" width="12" height="4.2" rx="1"/></svg></span>
         <div><h3 id="strip-title">4-Shot Strip</h3><p>Photos on a keepsake strip to save or send</p></div>
@@ -485,7 +472,7 @@
       <button class="icon-btn" id="cam-back" title="Back" aria-label="Back">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <span class="label" id="cam-mode-label">Single Shot</span>
+      <span class="label" id="cam-mode-label">Photo Strip</span>
       <button class="icon-btn" id="cam-flip" title="Flip camera" aria-label="Flip camera">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7v4M3 7h4M3 7l3.5 3.5A8 8 0 0 1 20 11"/><path d="M21 17v-4M21 17h-4M21 17l-3.5-3.5A8 8 0 0 1 4 13"/></svg>
       </button>
@@ -506,9 +493,9 @@
     </div>
     <div class="cam-bottom">
       <button class="shutter" id="shutter" aria-label="Take photo"></button>
-      <button class="timer-toggle" id="timer" type="button">
+      <button class="timer-toggle on" id="timer" type="button">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>
-        <span id="timer-label">3s timer · off</span>
+        <span id="timer-label">3s timer · on</span>
       </button>
     </div>
   </section>
@@ -593,7 +580,6 @@
     pin: "1234",
     logo: null,
     overlay: null,
-    layout: "polaroid",
     shots: 4,
     stripStyle: "strip",
     // Strip design. Authored in the original 700px-wide space and scaled up to
@@ -732,9 +718,9 @@
   var toastEl = $("#toast");
 
   // ---------- State ----------
-  var mode = "single";
+  var mode = "strip";      // the booth only produces 2x6 strips
   var facing = "user";
-  var timerOn = false;
+  var timerOn = true;      // guests need a moment to pose; off is the exception
   var stream = null;
   var capturing = false;
   var lastBlob = null;
@@ -861,7 +847,7 @@
     var s = $(id).querySelector(".sel");
     return s ? s.getAttribute("data-val") : null;
   }
-  ["#seg-layout", "#seg-stripstyle", "#seg-shots", "#seg-font",
+  ["#seg-stripstyle", "#seg-shots", "#seg-font",
    "#seg-shots-main", "#seg-border", "#seg-radius", "#seg-gap", "#seg-footer"].forEach(function (id) {
     $(id).addEventListener("click", function (e) {
       var b = e.target.closest("button[data-val]"); if (!b) return;
@@ -991,7 +977,6 @@
     $("#f-card").value = c.card || DEFAULTS.card;
     $("#f-pin").value = c.pin || DEFAULTS.pin;
     markSelectedPreset();
-    setSeg("#seg-layout", c.layout || "polaroid");
     setSeg("#seg-stripstyle", c.stripStyle || "strip");
     setSeg("#seg-shots", c.shots || 4);
     setSeg("#seg-shots-main", c.shots || 4);
@@ -1024,7 +1009,6 @@
       accent: $("#f-accent").value, bg: $("#f-bg").value, card: $("#f-card").value,
       pin: pin,
       logo: pendingLogo, overlay: pendingOverlay,
-      layout: getSeg("#seg-layout") || "polaroid",
       stripStyle: getSeg("#seg-stripstyle") || "strip",
       shots: parseInt(getSeg("#seg-shots-main") || getSeg("#seg-shots") || "4", 10),
       stripBorder: getSeg("#seg-border") || DEFAULTS.stripBorder,
@@ -1080,7 +1064,7 @@
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
   }
   function modeLabel() {
-    return mode === "single" ? "Single Shot" : (mode === "boom" ? "Boomerang" : "Photo Strip");
+    return mode === "boom" ? "Boomerang" : "Photo Strip";
   }
   function startCamera() {
     stopCamera();
@@ -1194,7 +1178,7 @@
     ensureFonts(function () { renderCurrent(true); });
   }
   function renderCurrent(isNew) {
-    var canvas = mode === "strip" ? renderStrip(lastImgs) : renderSingle(lastImgs[0]);
+    var canvas = renderStrip(lastImgs);
     canvas.toBlob(function (blob) { setResult(blob, "image/jpeg", isNew); }, "image/jpeg", 0.95);
   }
   function setResult(blob, type, isNew) {
@@ -1345,42 +1329,6 @@
     ctx.restore();
   }
 
-  function renderSingle(img) {
-    var W = 1080, H = 1500, layout = (CONFIG && CONFIG.layout) || "polaroid";
-    var c = document.createElement("canvas"); c.width = W; c.height = H;
-    var ctx = c.getContext("2d");
-    var hasLogo = logoImg && logoImg.complete && logoImg.naturalWidth;
-
-    if (layout === "fullbleed") {
-      ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
-      drawCover(ctx, img, 0, 0, W, H);
-      var grd = ctx.createLinearGradient(0, H - 470, 0, H);
-      grd.addColorStop(0, "rgba(0,0,0,0)"); grd.addColorStop(1, "rgba(0,0,0,0.82)");
-      ctx.fillStyle = grd; ctx.fillRect(0, H - 470, W, 470);
-      if (hasLogo) drawLogo(ctx, W / 2, H - 340, 64);
-      drawFooter(ctx, W / 2, H - 250, 1, true);
-    } else if (layout === "filmborder") {
-      ctx.fillStyle = theme.card; ctx.fillRect(0, 0, W, H);
-      var m = 70, pw = W - 2 * m, ph = 1080, px = m, py = m;
-      ctx.fillStyle = theme.accent; ctx.fillRect(px - 14, py - 14, pw + 28, ph + 28);
-      ctx.fillStyle = "#000"; ctx.fillRect(px, py, pw, ph);
-      drawCover(ctx, img, px, py, pw, ph);
-      var fy = py + ph + (hasLogo ? 150 : 90);
-      if (hasLogo) drawLogo(ctx, W / 2, py + ph + 36, 64);
-      drawFooter(ctx, W / 2, fy, 1, false);
-    } else {
-      ctx.fillStyle = theme.card; ctx.fillRect(0, 0, W, H);
-      ctx.strokeStyle = theme.border; ctx.lineWidth = 3; ctx.strokeRect(24, 24, W - 48, H - 48);
-      var spx = 60, spy = 60, spw = W - 120, sph = 1140;
-      ctx.fillStyle = "#000"; ctx.fillRect(spx, spy, spw, sph);
-      drawCover(ctx, img, spx, spy, spw, sph);
-      var sfy = spy + sph + (hasLogo ? 150 : 80);
-      if (hasLogo) drawLogo(ctx, W / 2, spy + sph + 26, 60);
-      drawFooter(ctx, W / 2, sfy, 1, false);
-    }
-    drawOverlay(ctx, W, H);
-    return c;
-  }
 
   // Exactly 2x6 at 600dpi. The canvas ratio is pinned, and photo height is
   // derived from whatever space is left, so any shot count fits with no crop.
