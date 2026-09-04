@@ -337,6 +337,7 @@
         <div class="cfield"><span>Accent</span><input id="f-accent" type="color" /></div>
         <div class="cfield"><span>Background</span><input id="f-bg" type="color" /></div>
         <div class="cfield"><span>Frame</span><input id="f-card" type="color" /></div>
+        <div class="cfield"><span>Date text</span><input id="f-datecolor" type="color" /></div>
       </div></div>
       <div class="field"><label>Setup Code</label><input id="f-pin" type="tel" inputmode="numeric" maxlength="6" placeholder="4-digit code" /></div>
 
@@ -454,12 +455,6 @@
         <div><h3 id="strip-title">4-Shot Strip</h3><p>Photos on a keepsake strip to save or send</p></div>
         <span class="chev">›</span>
       </button>
-      <div class="or exp">OR</div>
-      <button class="mode-card exp" data-mode="boom" type="button">
-        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
-        <div><h3>Boomerang</h3><p>A short looping GIF to save or send</p></div>
-        <span class="chev">›</span>
-      </button>
     </div>
     <button class="btn gallery-btn exp" id="gallery-btn" type="button" style="display:none">Gallery</button>
     <div class="foot"><span class="tagline" id="home-tagline">WINNERS CIRCLE</span><span class="diamond">◆</span></div>
@@ -481,7 +476,6 @@
       <video id="video" playsinline autoplay muted></video>
       <div class="progress-dots" id="dots" style="display:none"></div>
       <div class="countdown" id="countdown"></div>
-      <div class="recording" id="recording"><span class="rdot"></span>Recording</div>
       <div class="flash" id="flash"></div>
       <img class="shot-thumb" id="shotThumb" alt="" />
       <div class="err" id="camErr">
@@ -512,7 +506,7 @@
         </button>
         <button class="btn gold" id="r-share" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v13"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
-          Send to me
+          AirDrop
         </button>
       </div>
       <div class="row">
@@ -578,6 +572,7 @@
     bg: "#0c0b0a",
     card: "#fdfbf5",
     pin: "1234",
+    dateColor: "#8a8a8a",
     logo: null,
     overlay: null,
     shots: 4,
@@ -710,7 +705,6 @@
   var flashEl = $("#flash");
   var dotsEl = $("#dots");
   var shotThumb = $("#shotThumb");
-  var recordingEl = $("#recording");
   var shutter = $("#shutter");
   var timerBtn = $("#timer");
   var timerLabel = $("#timer-label");
@@ -975,6 +969,7 @@
     $("#f-accent").value = c.accent || DEFAULTS.accent;
     $("#f-bg").value = c.bg || DEFAULTS.bg;
     $("#f-card").value = c.card || DEFAULTS.card;
+    $("#f-datecolor").value = c.dateColor || DEFAULTS.dateColor;
     $("#f-pin").value = c.pin || DEFAULTS.pin;
     markSelectedPreset();
     setSeg("#seg-stripstyle", c.stripStyle || "strip");
@@ -996,7 +991,7 @@
     show("setup");
     ensureFonts(renderStripPreview);
   }
-  ["#f-accent", "#f-bg", "#f-card"].forEach(function (sel) {
+  ["#f-accent", "#f-bg", "#f-card", "#f-datecolor"].forEach(function (sel) {
     $(sel).addEventListener("input", previewTheme);
   });
   $("#setup-save").addEventListener("click", function () {
@@ -1007,6 +1002,7 @@
       date: ($("#f-date").value || DEFAULTS.date).trim(),
       tagline: ($("#f-tagline").value || DEFAULTS.tagline).trim(),
       accent: $("#f-accent").value, bg: $("#f-bg").value, card: $("#f-card").value,
+      dateColor: $("#f-datecolor").value,
       pin: pin,
       logo: pendingLogo, overlay: pendingOverlay,
       stripStyle: getSeg("#seg-stripstyle") || "strip",
@@ -1064,7 +1060,7 @@
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
   }
   function modeLabel() {
-    return mode === "boom" ? "Boomerang" : "Photo Strip";
+    return "Photo Strip";
   }
   function startCamera() {
     stopCamera();
@@ -1086,7 +1082,6 @@
   });
 
   function run() {
-    if (mode === "boom") return runBoomerang();
     capturing = true;
     shutter.setAttribute("disabled", "");
     shotThumb.style.display = "none";
@@ -1187,7 +1182,7 @@
     $("#resultImg").src = lastUrl;
     if (isNew) {
       capturing = false; shutter.removeAttribute("disabled");
-      dotsEl.style.display = "none"; shotThumb.style.display = "none"; recordingEl.classList.remove("show");
+      dotsEl.style.display = "none"; shotThumb.style.display = "none";
       currentEntry = { blob: blob, url: lastUrl, type: type, mode: mode };
       sessionPhotos.push(currentEntry); updateGalleryBtn();
       showReview();
@@ -1256,7 +1251,7 @@
   var previewText = null;
   function ftext(key) {
     var src = previewText || CONFIG || DEFAULTS;
-    return src[key] || "";
+    return (src[key] || "").trim();
   }
 
   // mode: "full" (title + venue + date), "compact" (title only).
@@ -1268,22 +1263,42 @@
     var gray = onDark ? "rgba(255,255,255,0.78)" : theme.cardGray;
     var fam = (CONFIG && CONFIG.font) || "Playfair Display";
     var y = top, halfLine = 150 * scale, gap = 26 * scale;
+    var dateInk = (CONFIG && CONFIG.dateColor) || DEFAULTS.dateColor || gray;
+    if (!ftext("title") && !ftext("venue") && !ftext("date")) return;
     ctx.strokeStyle = gold; ctx.lineWidth = 1.4 * scale;
     ctx.beginPath(); ctx.moveTo(cx - halfLine, y); ctx.lineTo(cx - gap, y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx + gap, y); ctx.lineTo(cx + halfLine, y); ctx.stroke();
     ctx.save(); ctx.translate(cx, y); ctx.rotate(Math.PI / 4);
     var d = 7 * scale; ctx.strokeRect(-d / 2, -d / 2, d, d); ctx.restore();
+    // Only the fields that were filled in. A blank venue used to leave its
+    // gap behind, so the date floated away from the title with a hole above it.
+    var lines = [];
+    if (ftext("title")) lines.push({
+      text: ftext("title"), fill: ink, step: 42,
+      font: "italic 600 " + (52 * scale) + "px '" + fam + "', Georgia, serif"
+    });
+    if (mode !== "compact") {
+      if (ftext("venue")) lines.push({
+        text: ftext("venue"), fill: gold, step: 36,
+        font: "italic 500 " + (30 * scale) + "px '" + fam + "', Georgia, serif"
+      });
+      if (ftext("date")) lines.push({
+        text: ftext("date"), fill: dateInk, step: 34,
+        font: "400 " + (22 * scale) + "px 'Jost', sans-serif"
+      });
+    }
+    if (!lines.length) return;
+
     ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = ink;
-    ctx.font = "italic 600 " + (52 * scale) + "px '" + fam + "', Georgia, serif";
-    ctx.fillText(ftext("title"), cx, y + 62 * scale);
-    if (mode === "compact") return;
-    ctx.fillStyle = gold;
-    ctx.font = "italic 500 " + (30 * scale) + "px '" + fam + "', Georgia, serif";
-    ctx.fillText(ftext("venue"), cx, y + 104 * scale);
-    ctx.fillStyle = gray;
-    ctx.font = "400 " + (22 * scale) + "px 'Jost', sans-serif";
-    ctx.fillText(ftext("date"), cx, y + 140 * scale);
+    var ly = y;
+    lines.forEach(function (ln, i) {
+      // First line always sits the same distance below the divider; the rest
+      // follow their own spacing, so removing one closes the gap.
+      ly += (i === 0 ? 62 : lines[i - 1].step) * scale;
+      ctx.fillStyle = ln.fill;
+      ctx.font = ln.font;
+      ctx.fillText(ln.text, cx, ly);
+    });
   }
 
   // ---------- Strip geometry ----------
@@ -1408,19 +1423,6 @@
     return c;
   }
 
-  // ---------- Boomerang GIF ----------
-  function runBoomerang() {
-    capturing = true; shutter.setAttribute("disabled", "");
-    dotsEl.style.display = "none"; shotThumb.style.display = "none";
-    countdownThen(function () {
-      recordingEl.classList.add("show");
-      var frames = [], i = 0, count = 12;
-      var iv = setInterval(function () {
-        frames.push(grabSmall());
-        if (++i >= count) { clearInterval(iv); recordingEl.classList.remove("show"); finishBoom(frames); }
-      }, 110);
-    });
-  }
   function grabSmall() {
     var W = 480, H = 500;
     var c = document.createElement("canvas"); c.width = W; c.height = H;
@@ -1428,45 +1430,6 @@
     if (facing === "user") { ctx.translate(W, 0); ctx.scale(-1, 1); }
     drawCover(ctx, video, 0, 0, W, H);
     return c;
-  }
-  function renderBoomFrame(photoCanvas) {
-    var W = 480, H = 600, phH = 500;
-    var c = document.createElement("canvas"); c.width = W; c.height = H;
-    var ctx = c.getContext("2d");
-    var fam = (CONFIG && CONFIG.font) || "Playfair Display";
-    ctx.fillStyle = theme.card; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#000"; ctx.fillRect(12, 12, W - 24, phH - 16);
-    ctx.drawImage(photoCanvas, 12, 12, W - 24, phH - 16);
-    var cx = W / 2, fy = phH + 30;
-    ctx.strokeStyle = theme.accent; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(cx - 90, fy); ctx.lineTo(cx - 16, fy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx + 16, fy); ctx.lineTo(cx + 90, fy); ctx.stroke();
-    ctx.save(); ctx.translate(cx, fy); ctx.rotate(Math.PI / 4); ctx.strokeRect(-4, -4, 8, 8); ctx.restore();
-    ctx.textAlign = "center";
-    ctx.fillStyle = theme.ink; ctx.font = "italic 600 30px '" + fam + "', Georgia, serif";
-    ctx.fillText(CONFIG.title, cx, fy + 36);
-    ctx.fillStyle = theme.accent; ctx.font = "italic 500 17px '" + fam + "', Georgia, serif";
-    ctx.fillText(CONFIG.venue, cx, fy + 60);
-    return c;
-  }
-  function finishBoom(frames) {
-    ensureFonts(function () {
-      var seq = frames.concat(frames.slice(1, -1).reverse());
-      var W = 480, H = 600;
-      var imgDatas = seq.map(function (pc) {
-        var full = renderBoomFrame(pc);
-        return full.getContext("2d").getImageData(0, 0, W, H);
-      });
-      try {
-        var bytes = encodeGIF(imgDatas, W, H, 9);
-        var blob = new Blob([bytes], { type: "image/gif" });
-        lastImgs = null; lastType = "image/gif"; filterIdx = 0;
-        setResult(blob, "image/gif", true);
-      } catch (e) {
-        capturing = false; shutter.removeAttribute("disabled");
-        toast("Could not build GIF on this device");
-      }
-    });
   }
 
   // ---------- Review actions ----------
@@ -1559,7 +1522,7 @@
   $("#r-print").addEventListener("click", printCurrent);
 
   function fileName(type) {
-    var ext = type === "image/gif" ? "gif" : "jpg";
+    var ext = "jpg";
     var slug = (CONFIG.title || "photo").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     return (slug || "photo") + "-" + Date.now() + "." + ext;
   }
@@ -1615,107 +1578,6 @@
     toast("Saving " + sessionPhotos.length + " photos…");
   });
 
-  // ===== GIF ENCODER (uniform 6x7x6 palette + classic LZW, GIF89a looping) =====
-  function encodeGIF(frames, width, height, delayCs) {
-    var RL = 6, GL = 7, BL = 6;
-    var palette = new Uint8Array(256 * 3);
-    var ri, gi, bi, idx = 0;
-    for (ri = 0; ri < RL; ri++) {
-      for (gi = 0; gi < GL; gi++) {
-        for (bi = 0; bi < BL; bi++) {
-          palette[idx * 3] = Math.round(ri * 255 / (RL - 1));
-          palette[idx * 3 + 1] = Math.round(gi * 255 / (GL - 1));
-          palette[idx * 3 + 2] = Math.round(bi * 255 / (BL - 1));
-          idx++;
-        }
-      }
-    }
-    function quant(r, g, b) {
-      var rq = Math.round(r * (RL - 1) / 255);
-      var gq = Math.round(g * (GL - 1) / 255);
-      var bq = Math.round(b * (BL - 1) / 255);
-      return (rq * GL + gq) * BL + bq;
-    }
-    var out = [];
-    function wByte(b) { out.push(b & 0xff); }
-    function wStr(s) { for (var i = 0; i < s.length; i++) out.push(s.charCodeAt(i) & 0xff); }
-    function wShort(v) { out.push(v & 0xff); out.push((v >> 8) & 0xff); }
-
-    wStr("GIF89a");
-    wShort(width); wShort(height);
-    wByte(0xF7); wByte(0); wByte(0);
-    for (var p = 0; p < 256 * 3; p++) wByte(palette[p]);
-
-    wByte(0x21); wByte(0xFF); wByte(0x0B);
-    wStr("NETSCAPE2.0");
-    wByte(0x03); wByte(0x01); wShort(0); wByte(0x00);
-
-    function lzwEncode(indices, minCodeSize) {
-      var EOF = -1;
-      var ClearCode = 1 << minCodeSize;
-      var EOICode = ClearCode + 1;
-      var codeSize = minCodeSize + 1;
-      var nextCode = EOICode + 1;
-      var maxCode = (1 << codeSize) - 1;
-      var dict = {};
-      var bytes = [];
-      var bitBuf = 0, bitCnt = 0;
-      function outputCode(code) {
-        bitBuf |= (code << bitCnt);
-        bitCnt += codeSize;
-        while (bitCnt >= 8) { bytes.push(bitBuf & 0xff); bitBuf >>= 8; bitCnt -= 8; }
-      }
-      function clearDict() {
-        dict = {}; codeSize = minCodeSize + 1; nextCode = EOICode + 1; maxCode = (1 << codeSize) - 1;
-      }
-      outputCode(ClearCode);
-      var prefix = indices.length ? indices[0] : EOF;
-      var i;
-      for (i = 1; i < indices.length; i++) {
-        var k = indices[i];
-        var key = (prefix << 8) | k;
-        if (dict[key] !== undefined) { prefix = dict[key]; }
-        else {
-          outputCode(prefix);
-          if (nextCode <= 0xFFF) {
-            dict[key] = nextCode; nextCode++;
-            if (nextCode > maxCode + 1 && codeSize < 12) { codeSize++; maxCode = (1 << codeSize) - 1; }
-          }
-          if (nextCode > 0xFFF) { outputCode(ClearCode); clearDict(); }
-          prefix = k;
-        }
-      }
-      if (prefix !== EOF) outputCode(prefix);
-      outputCode(EOICode);
-      if (bitCnt > 0) { bytes.push(bitBuf & 0xff); bitBuf = 0; bitCnt = 0; }
-      return bytes;
-    }
-
-    var minCodeSize = 8, f;
-    for (f = 0; f < frames.length; f++) {
-      var data = frames[f].data;
-      wByte(0x21); wByte(0xF9); wByte(0x04);
-      wByte(0x00); wShort(delayCs); wByte(0x00); wByte(0x00);
-      wByte(0x2C); wShort(0); wShort(0); wShort(width); wShort(height); wByte(0x00);
-      var n = width * height, indices = new Array(n), di = 0;
-      for (var pix = 0; pix < n; pix++) {
-        indices[pix] = quant(data[di], data[di + 1], data[di + 2]); di += 4;
-      }
-      wByte(minCodeSize);
-      var lzw = lzwEncode(indices, minCodeSize);
-      var pos = 0;
-      while (pos < lzw.length) {
-        var chunk = Math.min(255, lzw.length - pos);
-        wByte(chunk);
-        for (var c = 0; c < chunk; c++) wByte(lzw[pos + c]);
-        pos += chunk;
-      }
-      wByte(0x00);
-    }
-    wByte(0x3B);
-    return new Uint8Array(out);
-  }
-  // ===== END GIF ENCODER =====
 
   // ---------- Boot ----------
   buildPresets();
