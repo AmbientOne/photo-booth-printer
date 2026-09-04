@@ -542,6 +542,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
           Retake
         </button>
+        <button class="btn sm ghost" id="r-save" type="button" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
+          Save
+        </button>
         <button class="btn sm quiet" id="r-done" type="button">
           Done
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg>
@@ -1304,6 +1308,7 @@
     if (isNew) {
       capturing = false; shutter.removeAttribute("disabled");
       dotsEl.style.display = "none"; shotThumb.style.display = "none";
+      $("#r-save").style.display = "none";   // guests get print and airdrop only
       currentEntry = { blob: blob, url: lastUrl, type: type, mode: mode };
       sessionPhotos.push(currentEntry); updateGalleryBtn();
       showReview();
@@ -1704,13 +1709,21 @@
     lastBlob = entry.blob; lastType = entry.type; lastUrl = entry.url; currentEntry = entry; lastImgs = null;
     $("#resultImg").src = entry.url;
     $("#filters").style.display = "none";
+    $("#r-save").style.display = "";      // host looking back through the night
     show("review");
   }
+  $("#r-save").addEventListener("click", function () {
+    if (!lastBlob) return;
+    downloadBlob(lastUrl, fileName(lastType));
+    toast("Saved to Files");
+  });
   $("#gal-back").addEventListener("click", function () { show("home"); });
   $("#gal-saveall").addEventListener("click", function () {
     if (!sessionPhotos.length) return;
-    sessionPhotos.forEach(function (e, i) { setTimeout(function () { downloadBlob(e.url, fileName(e.type)); }, i * 350); });
-    toast("Saving " + sessionPhotos.length + " photos…");
+    // Safari asks once, then allows the rest. The stagger keeps it from
+    // treating a burst as a popup and dropping most of them.
+    sessionPhotos.forEach(function (e, i) { setTimeout(function () { downloadBlob(e.url, fileName(e.type)); }, i * 500); });
+    toast("Saving " + sessionPhotos.length + " photos to Files…");
   });
 
 
