@@ -118,10 +118,32 @@ if ($result -match 'IMPORTS OK') {
     Write-Host '    py -m pip install -r requirements.txt'
 } else {
     Write-Host 'NOT READY. SYSTEM cannot run Python.' -ForegroundColor Red
-    Write-Host 'Install from python.org (the "Windows installer (64-bit)" file, not'
-    Write-Host 'the Install Manager), run it as administrator, choose Customize'
-    Write-Host 'installation and tick "Install for all users". Then switch off the'
-    Write-Host 'Store aliases: Settings > Apps > Advanced app settings > App'
-    Write-Host 'execution aliases > python.exe and python3.exe off.'
+    Write-Host ''
+    if ((Test-Path 'C:\Windows\py.exe') -and -not $pf) {
+        # The common trap: the installer has two independent checkboxes, and
+        # the launcher one is ticked by default while the interpreter one is
+        # hidden under Customize. So py.exe is machine-wide but Python itself
+        # is in the user profile, registered under HKCU where SYSTEM cannot
+        # see it. The launcher starts, finds no interpreter, and gives up.
+        Write-Host 'The launcher is installed machine-wide but Python itself is not:'
+        Write-Host '  C:\Windows\py.exe          present'
+        Write-Host '  C:\Program Files\Python*   missing'
+        Write-Host ''
+        Write-Host 'That is the "Install launcher for all users" checkbox being ticked'
+        Write-Host 'while "Install for all users" was not. Run  py -0p  to see where'
+        Write-Host 'the interpreter actually ended up.'
+        Write-Host ''
+        Write-Host 'Fix (a repair will not move it):'
+        Write-Host '  1. Settings > Apps > Installed apps > uninstall Python 3.x'
+        Write-Host '  2. Re-run the python.org installer as administrator'
+        Write-Host '  3. Customize installation > Next > tick "Install for all users"'
+        Write-Host '  4. Elevated: py -m pip install -r ..\print-server\requirements.txt'
+    } else {
+        Write-Host 'Install from python.org (the "Windows installer (64-bit)" file, not'
+        Write-Host 'the Install Manager), run it as administrator, choose Customize'
+        Write-Host 'installation and tick "Install for all users". Then switch off the'
+        Write-Host 'Store aliases: Settings > Apps > Advanced app settings > App'
+        Write-Host 'execution aliases > python.exe and python3.exe off.'
+    }
 }
 Write-Host ''
