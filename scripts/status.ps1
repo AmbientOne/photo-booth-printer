@@ -39,9 +39,33 @@ elseif ($serverTask) { Note 'Setup' 'router -- a travel router hosts the Wi-Fi' 
 else { Note 'Setup' 'not installed -- run install.ps1 or install-router.ps1' }
 
 # --- ask the server where it thinks it is ---------------------------------
+# The server answers 503 when the hot folder is not ready. That is a reply,
+# not silence -- Invoke-RestMethod throws on it, which made a degraded booth
+# look identical to a dead one.
 $body = $null
-try { $body = Invoke-RestMethod -Uri 'http://127.0.0.1:5000/status' -TimeoutSec 4 } catch {}
-$addr = if ($body -and $body.advertised_ip) { $body.advertised_ip } else { '192.168.137.1' }
+$httpCode = 0
+try {
+    $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/status' -UseBasicParsing -TimeoutSec 5
+    $httpCode = [int]$resp.StatusCode
+    $body = $resp.Content | ConvertFrom-Json
+} catch {
+    $r = $_.Exception.Response
+    if ($r) {
+        $httpCode = [int]$r.StatusCode
+        try {
+            $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
+            $body = $reader.ReadToEnd() | ConvertFrom-Json
+            $reader.Close()
+        } catch {}
+    }
+}
+
+# Fall back to what the installer recorded rather than the hotspot address --
+# on a router setup 192.168.137.1 is simply the wrong guess.
+$configured = [Environment]::GetEnvironmentVariable('PHOTOBOOTH_ADVERTISED_IP', 'Machine')
+if ($body -and $body.advertised_ip) { $addr = $body.advertised_ip }
+elseif ($configured)                { $addr = $configured }
+else                                { $addr = '192.168.137.1' }
 
 # --- the network ----------------------------------------------------------
 if ($hotspotMode) {
@@ -60,8 +84,15 @@ if ($hotspotMode) {
 foreach ($t in @($hotspotTask, $serverTask)) {
     if ($null -eq $t) { continue }
     $info = Get-ScheduledTaskInfo -TaskName $t.TaskName -ErrorAction SilentlyContinue
-    $ok = $t.State -ne 'Disabled' -and ($info.LastTaskResult -eq 0 -or $null -eq $info.LastTaskResult)
-    Line $t.TaskName $ok ("state={0} lastResult={1}" -f $t.State, $info.LastTaskResult)
+    # 267009 SCHED_S_TASK_RUNNING and 267011 SCHED_S_TASK_HAS_NOT_RUN are
+    # informational. The print server is meant to run forever, so 267009 is
+    # exactly what a healthy task looks like.
+    $goodResults = @(0, 267009, 267011)
+    $ok = $t.State -ne 'Disabled' -and
+          ($null -eq $info.LastTaskResult -or $goodResults -contains $info.LastTaskResult)
+    $detail = "state={0} lastResult={1}" -f $t.State, $info.LastTaskResult
+    if ($info.LastTaskResult -eq 267009) { $detail += " (running)" }
+    Line $t.TaskName $ok $detail
 }
 if (-not $serverTask) { Line 'Print server task' $false 'not registered' }
 
@@ -106,8 +137,10 @@ if ($body) {
     Write-Host ('  Prints this install : {0}' -f $body.prints_this_install)
     Write-Host ('  Queued at printer   : {0}' -f $body.queued_in_hot_folder)
     Write-Host ('  Uptime              : {0} min' -f [int]($body.uptime_seconds / 60))
+} elseif ($httpCode -ne 0) {
+    Line 'Print server' $false ("answered HTTP {0} but the reply could not be read" -f $httpCode)
 } else {
-    Line 'Print server' $false 'not responding -> restart the computer'
+    Line 'Print server' $false 'not responding on port 5000 -> restart the computer'
 }
 
 # --- what to open on the iPad ---------------------------------------------
