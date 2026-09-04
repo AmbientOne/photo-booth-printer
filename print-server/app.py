@@ -45,6 +45,12 @@ DATA_DIR = Path(os.environ.get("PHOTOBOOTH_DATA_DIR", r"C:\PhotoBooth"))
 ARCHIVE_DIR = DATA_DIR / "archive"
 LOG_DIR = DATA_DIR / "logs"
 
+# Every strip the booth composites, printed or not. Deliberately NOT the
+# archive: that directory doubles as the duplicate-print ledger, seeded at
+# startup, so writing un-printed captures into it would make the server refuse
+# to print them later.
+CAPTURE_DIR = DATA_DIR / "captures"
+
 # The guest-facing booth page, served straight from the repo checkout so there
 # is no copy to keep in sync.
 BOOTH_DIR = Path(os.environ.get("PHOTOBOOTH_BOOTH_DIR", CODE_DIR.parent / "photo-booth"))
@@ -106,7 +112,7 @@ JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg"}
 JPEG_MAGIC = b"\xff\xd8\xff"
 
-for _d in (ARCHIVE_DIR, LOG_DIR):
+for _d in (ARCHIVE_DIR, LOG_DIR, CAPTURE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # --------------------------------------------------------------- address ----
@@ -273,6 +279,7 @@ def status():
         prints_this_install=printed,
         max_upload_mb=round(MAX_UPLOAD_BYTES / 1024 / 1024, 1),
         data_dir=str(DATA_DIR),
+        captures=len(list(CAPTURE_DIR.glob("*.jpg"))),
         advertised_ip=ADVERTISED_IP,
         access_point=ADVERTISED_IP == AP_HOST_IP,
         https_ready=HTTPS_READY,
@@ -397,6 +404,52 @@ def print_photo():
     finally:
         with _lock:
             _in_flight.discard(job_id)
+
+
+@app.post("/save")
+def save_capture():
+    """Archive a finished strip without printing it.
+
+    The booth calls this for every capture so nothing depends on the iPad
+    keeping it. Safari cannot save files without a tap, and the gallery holds
+    everything in memory, so a reload mid-event would otherwise lose the lot.
+
+    Separate from /print on purpose: this must never consume media, and must
+    never mark a job as printed.
+    """
+    job_id = (request.form.get("job_id") or "").strip()
+    file = request.files.get("image")
+
+    if file is None or not file.filename:
+        return jsonify(status="error", error="Missing 'image' file field"), 400
+    if not job_id or not JOB_ID_RE.match(job_id):
+        return jsonify(status="error", error="Missing or invalid job_id"), 400
+    if Path(file.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+        return jsonify(status="error", error="Only .jpg / .jpeg files are accepted"), 415
+    head = file.stream.read(3)
+    file.stream.seek(0)
+    if head != JPEG_MAGIC:
+        return jsonify(status="error", error="File content is not a JPEG"), 415
+
+    target = CAPTURE_DIR / (job_id + ".jpg")
+    if target.exists():
+        return jsonify(status="exists", job_id=job_id), 200
+
+    temp = CAPTURE_DIR / (job_id + ".jpg.tmp")
+    try:
+        file.save(temp)
+        os.replace(temp, target)
+    except Exception as exc:
+        logger.exception("SAVE FAILED job=%s: %s", job_id, exc)
+        try:
+            if temp.exists():
+                temp.unlink()
+        except OSError:
+            pass
+        return jsonify(status="error", job_id=job_id, error=str(exc)), 500
+
+    logger.info("SAVED job=%s bytes=%d -> %s", job_id, target.stat().st_size, target)
+    return jsonify(status="saved", job_id=job_id, path=str(target)), 200
 
 
 @app.get("/cert")

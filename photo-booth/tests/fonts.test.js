@@ -107,8 +107,19 @@ test("the renderer draws through the face table, not fixed weights", () => {
     "drawFooter still hardcodes a weight; it must use fontFace(fam) so each " +
     "family draws with a face that was loaded"
   );
-  assert.match(body[0], /face\.title/, "title should use face.title");
-  assert.match(body[0], /face\.venue/, "venue should use face.venue");
+  assert.match(body[0], /face\.title/, "title should take its weight from the face");
+  assert.match(
+    body[0], /fontFace\(vfam\)\.venue/,
+    "venue should look up the face for its own family, not the headline's"
+  );
+  assert.match(
+    body[0], /fontFace\(dfam\)\.venue/,
+    "date should look up the face for its own family"
+  );
+  assert.doesNotMatch(
+    body[0], /px 'Jost'/,
+    "the date font is configurable now; it must not be hardcoded to Jost"
+  );
 });
 
 test("the preview waits for the font before its final draw", () => {

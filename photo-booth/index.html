@@ -8,7 +8,7 @@
 <title>Photo Booth</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&family=Cormorant+Garamond:ital,wght@0,600;1,600&family=DM+Serif+Display:ital@0;1&family=Bodoni+Moda:ital,wght@0,600;1,600&family=Great+Vibes&family=Jost:wght@300;400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&family=Cormorant+Garamond:ital,wght@0,600;1,600&family=DM+Serif+Display:ital@0;1&family=Bodoni+Moda:ital,wght@0,600;1,600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
     --bg: #0c0b0a;
@@ -451,12 +451,37 @@
             <button type="button" data-val="Cormorant Garamond" style="font-family:'Cormorant Garamond',serif">Cormorant</button>
             <button type="button" data-val="DM Serif Display" style="font-family:'DM Serif Display',serif">DM Serif</button>
             <button type="button" data-val="Bodoni Moda" style="font-family:'Bodoni Moda',serif">Bodoni</button>
-            <button type="button" data-val="Great Vibes" style="font-family:'Great Vibes',cursive">Great Vibes</button>
             <button type="button" data-val="Snell Roundhand" style="font-family:'Snell Roundhand','Savoye LET',cursive">Snell</button>
             <button type="button" data-val="Didot" style="font-family:'Didot','Bodoni 72',serif">Didot</button>
             <button type="button" data-val="Hoefler Text" style="font-family:'Hoefler Text',Georgia,serif">Hoefler</button>
+            <button type="button" data-val="Jost" style="font-family:'Jost',sans-serif">Jost</button>
           </div>
         </div>
+        <div class="field"><label>Venue Font</label>
+          <div class="seg" id="seg-venuefont">
+            <button type="button" data-val="Playfair Display" style="font-family:'Playfair Display',serif">Playfair</button>
+            <button type="button" data-val="Cormorant Garamond" style="font-family:'Cormorant Garamond',serif">Cormorant</button>
+            <button type="button" data-val="DM Serif Display" style="font-family:'DM Serif Display',serif">DM Serif</button>
+            <button type="button" data-val="Bodoni Moda" style="font-family:'Bodoni Moda',serif">Bodoni</button>
+            <button type="button" data-val="Snell Roundhand" style="font-family:'Snell Roundhand','Savoye LET',cursive">Snell</button>
+            <button type="button" data-val="Didot" style="font-family:'Didot','Bodoni 72',serif">Didot</button>
+            <button type="button" data-val="Hoefler Text" style="font-family:'Hoefler Text',Georgia,serif">Hoefler</button>
+            <button type="button" data-val="Jost" style="font-family:'Jost',sans-serif">Jost</button>
+          </div>
+        </div>
+        <div class="field"><label>Date Font</label>
+          <div class="seg" id="seg-datefont">
+            <button type="button" data-val="Playfair Display" style="font-family:'Playfair Display',serif">Playfair</button>
+            <button type="button" data-val="Cormorant Garamond" style="font-family:'Cormorant Garamond',serif">Cormorant</button>
+            <button type="button" data-val="DM Serif Display" style="font-family:'DM Serif Display',serif">DM Serif</button>
+            <button type="button" data-val="Bodoni Moda" style="font-family:'Bodoni Moda',serif">Bodoni</button>
+            <button type="button" data-val="Snell Roundhand" style="font-family:'Snell Roundhand','Savoye LET',cursive">Snell</button>
+            <button type="button" data-val="Didot" style="font-family:'Didot','Bodoni 72',serif">Didot</button>
+            <button type="button" data-val="Hoefler Text" style="font-family:'Hoefler Text',Georgia,serif">Hoefler</button>
+            <button type="button" data-val="Jost" style="font-family:'Jost',sans-serif">Jost</button>
+          </div>
+        </div>
+        <div class="field"><div class="switch"><span>Keep a copy on the booth PC</span><button type="button" class="toggle" id="tg-autosave"></button></div></div>
         <div class="field"><div class="switch"><span>Attract / idle screen</span><button type="button" class="toggle" id="tg-attract"></button></div></div>
         <div class="field"><div class="switch"><span>Shutter sound</span><button type="button" class="toggle" id="tg-sound"></button></div></div>
         <div class="field"><div class="switch"><span>Flash on capture</span><button type="button" class="toggle" id="tg-flash"></button></div></div>
@@ -620,6 +645,9 @@
     stripFooter: "full",     // full | compact | none
     font: "Playfair Display",
     captionScale: "1",
+    venueFont: "Playfair Display",
+    dateFont: "Jost",
+    autosave: true,
     attract: true,
     sound: true,
     flash: true
@@ -892,6 +920,7 @@
     return s ? s.getAttribute("data-val") : null;
   }
   ["#seg-stripstyle", "#seg-shots", "#seg-font", "#seg-capsize",
+   "#seg-venuefont", "#seg-datefont",
    "#seg-shots-main", "#seg-border", "#seg-radius", "#seg-gap", "#seg-footer"].forEach(function (id) {
     $(id).addEventListener("click", function (e) {
       var b = e.target.closest("button[data-val]"); if (!b) return;
@@ -954,6 +983,8 @@
       date: $("#f-date").value || DEFAULTS.date,
       font: getSeg("#seg-font") || DEFAULTS.font,
       captionScale: getSeg("#seg-capsize") || DEFAULTS.captionScale,
+      venueFont: getSeg("#seg-venuefont") || DEFAULTS.venueFont,
+      dateFont: getSeg("#seg-datefont") || DEFAULTS.dateFont,
       titleColor: $("#f-titlecolor").value || DEFAULTS.titleColor,
       venueColor: $("#f-venuecolor").value || DEFAULTS.venueColor,
       dateColor: $("#f-datecolor").value || DEFAULTS.dateColor,
@@ -979,7 +1010,7 @@
     $(sel).addEventListener("input", renderStripPreview);
   });
   function setToggle(id, on) { $(id).classList.toggle("on", !!on); }
-  ["#tg-attract", "#tg-sound", "#tg-flash"].forEach(function (id) {
+  ["#tg-autosave", "#tg-attract", "#tg-sound", "#tg-flash"].forEach(function (id) {
     $(id).addEventListener("click", function () { this.classList.toggle("on"); });
   });
   $("#btn-exp").addEventListener("click", function () {
@@ -1045,6 +1076,9 @@
     setSeg("#seg-footer", c.stripFooter == null ? DEFAULTS.stripFooter : c.stripFooter);
     setSeg("#seg-font", c.font || "Playfair Display");
     setSeg("#seg-capsize", c.captionScale || DEFAULTS.captionScale);
+    setSeg("#seg-venuefont", c.venueFont || DEFAULTS.venueFont);
+    setSeg("#seg-datefont", c.dateFont || DEFAULTS.dateFont);
+    setToggle("#tg-autosave", c.autosave !== false);
     setToggle("#tg-attract", c.attract !== false);
     setToggle("#tg-sound", c.sound !== false);
     setToggle("#tg-flash", c.flash !== false);
@@ -1074,6 +1108,8 @@
       logo: pendingLogo, overlay: pendingOverlay,
       stripStyle: getSeg("#seg-stripstyle") || "strip",
       captionScale: getSeg("#seg-capsize") || DEFAULTS.captionScale,
+      venueFont: getSeg("#seg-venuefont") || DEFAULTS.venueFont,
+      dateFont: getSeg("#seg-datefont") || DEFAULTS.dateFont,
       shots: parseInt(getSeg("#seg-shots-main") || getSeg("#seg-shots") || "4", 10),
       stripBorder: getSeg("#seg-border") || DEFAULTS.stripBorder,
       stripRadius: parseInt(getSeg("#seg-radius") || DEFAULTS.stripRadius, 10),
@@ -1081,6 +1117,7 @@
       stripPad: DEFAULTS.stripPad,
       stripFooter: getSeg("#seg-footer") || DEFAULTS.stripFooter,
       font: getSeg("#seg-font") || "Playfair Display",
+      autosave: $("#tg-autosave").classList.contains("on"),
       attract: $("#tg-attract").classList.contains("on"),
       sound: $("#tg-sound").classList.contains("on"),
       flash: $("#tg-flash").classList.contains("on")
@@ -1233,7 +1270,7 @@
     "Cormorant Garamond": { title: 600, venue: 600, italic: true },
     "DM Serif Display":   { title: 400, venue: 400, italic: true },
     "Bodoni Moda":        { title: 600, venue: 600, italic: true },
-    "Great Vibes":        { title: 400, venue: 400, italic: false },
+    "Jost":               { title: 400, venue: 400, italic: false },
     // Built into iOS. Nothing to download, so canvas can always use them --
     // which is the whole point: a webfont that Safari refuses to hand to
     // canvas is indistinguishable from a broken picker, and no amount of
@@ -1281,7 +1318,8 @@
       Promise.all([
         document.fonts.load(it + face.title + " 52px '" + fam + "'"),
         document.fonts.load(it + face.venue + " 30px '" + fam + "'"),
-        document.fonts.load("400 22px 'Jost'")
+        document.fonts.load("400 30px '" + (fconf("venueFont") || fam) + "'"),
+        document.fonts.load("400 22px '" + (fconf("dateFont") || "Jost") + "'")
       ]).then(function () {
         return document.fonts.ready;      // wait for activation, not just fetch
       }).then(function () {
@@ -1309,7 +1347,11 @@
       capturing = false; shutter.removeAttribute("disabled");
       dotsEl.style.display = "none"; shotThumb.style.display = "none";
       $("#r-save").style.display = "none";   // guests get print and airdrop only
-      currentEntry = { blob: blob, url: lastUrl, type: type, mode: mode };
+      // Give the job its id here rather than at print time, so the copy kept
+      // on the mini PC and the eventual print refer to the same strip.
+      var jid = "booth-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      currentEntry = { blob: blob, url: lastUrl, type: type, mode: mode, jobId: jid };
+      saveToBooth(blob, jid, type);
       sessionPhotos.push(currentEntry); updateGalleryBtn();
       showReview();
     } else if (currentEntry) {
@@ -1399,6 +1441,8 @@
     // Caption size multiplier. Capped at 1.5: the footer zone is about 397px
     // tall at default settings and three lines at 1.5 occupy roughly 320,
     // so anything larger runs off the bottom of the strip.
+    var vfam = fconf("venueFont") || fam;
+    var dfam = fconf("dateFont") || fam;
     var capScale = parseFloat(fconf("captionScale"));
     if (!(capScale > 0)) capScale = 1;
     scale = scale * Math.min(capScale, 1.5);
@@ -1422,11 +1466,11 @@
     if (mode !== "compact") {
       if (ftext("venue")) lines.push({
         text: ftext("venue"), fill: venueInk, step: 36,
-        font: fontString(fam, face.venue, 30 * scale)
+        font: fontString(vfam, fontFace(vfam).venue, 30 * scale)
       });
       if (ftext("date")) lines.push({
         text: ftext("date"), fill: dateInk, step: 34,
-        font: "400 " + (22 * scale) + "px 'Jost', sans-serif"
+        font: fontString(dfam, fontFace(dfam).venue, 22 * scale)
       });
     }
     if (!lines.length) return;
@@ -1590,6 +1634,22 @@
       toast("Long-press the image to save it to Photos");
     }
   });
+
+  // Safari cannot save a file without a tap, and the gallery only holds
+  // strips in memory, so a reload mid-event would lose the night. Send every
+  // capture to the mini PC, which keeps it on a real disk. Fire and forget:
+  // this must never interrupt a guest, and the print path is unaffected.
+  function saveToBooth(blob, jobId, type) {
+    if (type !== "image/jpeg") return;
+    // Off for events where the mini PC should not fill up. Nothing else
+    // changes: printed strips are still archived by the server.
+    if (CONFIG && CONFIG.autosave === false) return;
+    var fd = new FormData();
+    fd.append("image", new File([blob], jobId + ".jpg", { type: "image/jpeg" }));
+    fd.append("job_id", jobId);
+    fetch(PRINT_SERVER + "/save", { method: "POST", body: fd })
+      .catch(function () { /* offline or no server: the strip is still on screen */ });
+  }
 
   // ---------- Print ----------
   // Same origin when the booth is served by the print server itself
