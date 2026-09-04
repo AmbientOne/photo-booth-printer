@@ -1,0 +1,9 @@
+# TLS material -- never commit the private key
+certs/
+*.pem
+*.pfx
+*.crt
+*.key
+
+__pycache__/
+*.pyc

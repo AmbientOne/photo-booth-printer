@@ -1,0 +1,21 @@
+# TLS material. The server certificate's private key must never be committed;
+# regenerate it per machine with print-server/make_cert.py.
+certs/
+*.pem
+*.pfx
+*.crt
+*.key
+
+# Event output: photos of guests, logs, and the print token all live under
+# C:\PhotoBooth, but ignore them here too in case anyone points the data
+# directory at the checkout.
+archive/
+logs/
+token.txt
+
+# Tooling scratch
+.playwright-mcp/
+__pycache__/
+*.pyc
+*.log
+.DS_Store

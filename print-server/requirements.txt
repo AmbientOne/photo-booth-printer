@@ -1,0 +1,14 @@
+# WSGI app framework.
+Flask>=3.0
+
+# HTTP listener on :5000. Production-grade and multi-threaded, unlike the
+# Flask development server -- it is what serves /cert and the booth page.
+waitress>=3.0
+
+# HTTPS listener on :5443. Waitress has no TLS support at all, and the iPad
+# camera only works on a secure context, so cheroot handles that socket with
+# its built-in SSL adapter.
+cheroot>=10.0
+
+# Generates the local root + server certificate (make_cert.py).
+cryptography>=42.0
