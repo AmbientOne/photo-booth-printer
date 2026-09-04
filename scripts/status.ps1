@@ -35,10 +35,15 @@ foreach ($name in 'PhotoBooth Hotspot', 'PhotoBooth Print Server') {
 }
 
 # --- automatic logon, the thing that makes a restart sufficient ------------
-$auto = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon').AutoAdminLogon
-Line 'Auto logon' ($auto -eq '1') $(
-    if ($auto -eq '1') { 'on -- boots straight to the desktop' }
+$wl = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+Line 'Auto logon' ($wl.AutoAdminLogon -eq '1') $(
+    if ($wl.AutoAdminLogon -eq '1') { 'on -- boots straight to the desktop' }
     else { 'off -- someone must log in after a power cut' })
+
+# A leftover countdown means auto logon works now and stops working later.
+if ($null -ne $wl.AutoLogonCount) {
+    Line 'Auto logon countdown' $false ("AutoLogonCount={0} -- auto logon stops after that many boots. Rerun install.ps1" -f $wl.AutoLogonCount)
+}
 
 # --- listeners -------------------------------------------------------------
 foreach ($port in 5000, 5443) {

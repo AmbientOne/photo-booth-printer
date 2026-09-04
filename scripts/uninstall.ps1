@@ -34,7 +34,9 @@ if (-not $KeepAutoLogon) {
     Write-Host 'Disabling automatic logon and clearing the stored password...'
     $winlogon = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
     Set-ItemProperty $winlogon -Name 'AutoAdminLogon' -Value '0' -Type String
-    Remove-ItemProperty $winlogon -Name 'DefaultPassword' -ErrorAction SilentlyContinue
+    foreach ($v in 'DefaultPassword', 'DefaultDomainName', 'AutoLogonCount') {
+        Remove-ItemProperty $winlogon -Name $v -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host 'Stopping anything still running...'

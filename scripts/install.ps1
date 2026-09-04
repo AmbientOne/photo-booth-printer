@@ -119,13 +119,25 @@ if ($EnableAutoLogon) {
     Write-Warning 'Auto logon stores the account password in the registry in clear text.'
     Write-Warning 'Only do this on a machine dedicated to the booth.'
     $cred = Get-Credential -UserName $user -Message 'Password for automatic logon'
-    $plain = $cred.GetNetworkCredential().Password
+    $nc = $cred.GetNetworkCredential()
+    $domain = if ($nc.Domain) { $nc.Domain } else { $env:COMPUTERNAME }
 
-    Set-ItemProperty $winlogon -Name 'AutoAdminLogon' -Value '1' -Type String
-    Set-ItemProperty $winlogon -Name 'DefaultUserName' -Value $cred.UserName -Type String
-    Set-ItemProperty $winlogon -Name 'DefaultPassword' -Value $plain -Type String
-    Remove-Variable plain
-    Write-Host '      enabled.'
+    Set-ItemProperty $winlogon -Name 'AutoAdminLogon'    -Value '1'        -Type String
+    Set-ItemProperty $winlogon -Name 'DefaultUserName'   -Value $nc.UserName -Type String
+    Set-ItemProperty $winlogon -Name 'DefaultDomainName' -Value $domain    -Type String
+    Set-ItemProperty $winlogon -Name 'DefaultPassword'   -Value $nc.Password -Type String
+
+    # AutoLogonCount is a countdown: Windows decrements it on each boot and
+    # stops logging in automatically when it hits zero. Tools like Sysinternals
+    # Autologon set it. Left behind, the booth would come back after a restart
+    # a few times and then quietly stop -- the exact failure this design is
+    # meant to rule out.
+    Remove-ItemProperty $winlogon -Name 'AutoLogonCount' -ErrorAction SilentlyContinue
+
+    Write-Host ('      enabled for {0}\{1}.' -f $domain, $nc.UserName)
+    Remove-Variable nc
+    Write-Host '      NOTE: a Microsoft account or a required PIN can block this.'
+    Write-Host '            Use a local account with a plain password.'
 } else {
     Write-Host '      skipped. Re-run with -EnableAutoLogon, or set it up in netplwiz.'
     Write-Host '      Without it, someone must log in after a power cut.'
