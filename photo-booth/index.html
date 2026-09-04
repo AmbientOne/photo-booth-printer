@@ -437,6 +437,14 @@
             <button type="button" data-val="4">4</button>
           </div>
         </div>
+        <div class="field"><label>Caption Size</label>
+          <div class="seg" id="seg-capsize">
+            <button type="button" data-val="0.85">S</button>
+            <button type="button" data-val="1">M</button>
+            <button type="button" data-val="1.25">L</button>
+            <button type="button" data-val="1.5">XL</button>
+          </div>
+        </div>
         <div class="field"><label>Headline Font</label>
           <div class="seg" id="seg-font">
             <button type="button" data-val="Playfair Display" style="font-family:'Playfair Display',serif">Playfair</button>
@@ -607,6 +615,7 @@
     stripPad: 36,            // margin around photos
     stripFooter: "full",     // full | compact | none
     font: "Playfair Display",
+    captionScale: "1",
     attract: true,
     sound: true,
     flash: true
@@ -878,7 +887,7 @@
     var s = $(id).querySelector(".sel");
     return s ? s.getAttribute("data-val") : null;
   }
-  ["#seg-stripstyle", "#seg-shots", "#seg-font",
+  ["#seg-stripstyle", "#seg-shots", "#seg-font", "#seg-capsize",
    "#seg-shots-main", "#seg-border", "#seg-radius", "#seg-gap", "#seg-footer"].forEach(function (id) {
     $(id).addEventListener("click", function (e) {
       var b = e.target.closest("button[data-val]"); if (!b) return;
@@ -940,6 +949,7 @@
       venue: $("#f-venue").value || DEFAULTS.venue,
       date: $("#f-date").value || DEFAULTS.date,
       font: getSeg("#seg-font") || DEFAULTS.font,
+      captionScale: getSeg("#seg-capsize") || DEFAULTS.captionScale,
       titleColor: $("#f-titlecolor").value || DEFAULTS.titleColor,
       venueColor: $("#f-venuecolor").value || DEFAULTS.venueColor,
       dateColor: $("#f-datecolor").value || DEFAULTS.dateColor,
@@ -1030,6 +1040,7 @@
     setSeg("#seg-gap", c.stripGap == null ? DEFAULTS.stripGap : c.stripGap);
     setSeg("#seg-footer", c.stripFooter == null ? DEFAULTS.stripFooter : c.stripFooter);
     setSeg("#seg-font", c.font || "Playfair Display");
+    setSeg("#seg-capsize", c.captionScale || DEFAULTS.captionScale);
     setToggle("#tg-attract", c.attract !== false);
     setToggle("#tg-sound", c.sound !== false);
     setToggle("#tg-flash", c.flash !== false);
@@ -1058,6 +1069,7 @@
       pin: pin,
       logo: pendingLogo, overlay: pendingOverlay,
       stripStyle: getSeg("#seg-stripstyle") || "strip",
+      captionScale: getSeg("#seg-capsize") || DEFAULTS.captionScale,
       shots: parseInt(getSeg("#seg-shots-main") || getSeg("#seg-shots") || "4", 10),
       stripBorder: getSeg("#seg-border") || DEFAULTS.stripBorder,
       stripRadius: parseInt(getSeg("#seg-radius") || DEFAULTS.stripRadius, 10),
@@ -1379,6 +1391,12 @@
     var gray = onDark ? "rgba(255,255,255,0.78)" : theme.cardGray;
     var fam = fconf("font") || "Playfair Display";
     var face = fontFace(fam);
+    // Caption size multiplier. Capped at 1.5: the footer zone is about 397px
+    // tall at default settings and three lines at 1.5 occupy roughly 320,
+    // so anything larger runs off the bottom of the strip.
+    var capScale = parseFloat(fconf("captionScale"));
+    if (!(capScale > 0)) capScale = 1;
+    scale = scale * Math.min(capScale, 1.5);
     var y = top, halfLine = 150 * scale, gap = 26 * scale;
     var titleInk = onDark ? "#ffffff" : (fconf("titleColor") || ink);
     var venueInk = onDark ? theme.accentSoft : (fconf("venueColor") || gold);
