@@ -65,6 +65,11 @@ cd C:\printer\print-server
 py -m pip install -r requirements.txt
 ```
 
+The destination folder is up to you -- every script resolves its paths relative
+to its own location, so `C:\printers` or anywhere else works. Just keep the
+`print-server\`, `photo-booth\` and `scripts\` folders together, and
+substitute your own path for `C:\printer` throughout this document.
+
 Python 3.10+ from python.org, with the `py` launcher, is assumed.
 
 Windows blocks all PowerShell scripts by default, so allow local ones once
@@ -79,6 +84,13 @@ these, which arrived via `git clone`. Without it every command below fails with
 *"running scripts is disabled on this system"*. The scheduled tasks registered
 later are unaffected either way -- they invoke PowerShell with an explicit
 `-ExecutionPolicy Bypass`, so the booth starts regardless of this setting.
+
+If you downloaded a ZIP from GitHub instead of cloning, Windows also tags every
+file as internet-sourced and `RemoteSigned` keeps blocking them. Clear that:
+
+```powershell
+Get-ChildItem C:\printer -Recurse -File | Unblock-File
+```
 
 To run a single script without changing the policy at all:
 
