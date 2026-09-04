@@ -60,34 +60,51 @@ if (-not $elevated) {
 }
 
 $out = Join-Path $env:SystemRoot 'Temp\photobooth-pycheck.txt'
-Remove-Item $out -ErrorAction SilentlyContinue
+$bat = Join-Path $env:SystemRoot 'Temp\photobooth-pycheck.cmd'
+Remove-Item $out, $bat -ErrorAction SilentlyContinue
 
-# Version first, then the imports the server actually needs. pip installing to
-# a per-user site-packages fails only on the second, which is the subtler bug.
-$cmd = '/c (py -V && py -c "import flask, waitress, cheroot, cryptography; print(''IMPORTS OK'')") > "' + $out + '" 2>&1'
+# Put the commands in a .cmd rather than passing them as a task argument.
+# Quoting a nested py -c "..." through Task Scheduler and cmd is fragile, and
+# a file has no quoting to get wrong.
+@'
+@echo off
+(
+  py -V
+  py -c "import flask, waitress, cheroot, cryptography; print('IMPORTS OK')"
+) > "%SystemRoot%\Temp\photobooth-pycheck.txt" 2>&1
+'@ | Set-Content -Path $bat -Encoding ASCII
 
 Register-ScheduledTask -TaskName 'PhotoBoothPyCheck' -Force `
     -Principal (New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest) `
     -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(1)) `
-    -Action (New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $cmd) | Out-Null
+    -Action (New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "' + $bat + '"')) | Out-Null
 
 Start-ScheduledTask -TaskName 'PhotoBoothPyCheck'
 
-$deadline = (Get-Date).AddSeconds(30)
+# Wait for the OUTPUT, not the task state. Immediately after Start-ScheduledTask
+# the state is still Ready for a moment, so watching for Ready returns instantly
+# and reads an empty file.
+$deadline = (Get-Date).AddSeconds(45)
 while ((Get-Date) -lt $deadline) {
-    if ((Get-ScheduledTask -TaskName 'PhotoBoothPyCheck').State -eq 'Ready') { break }
     Start-Sleep -Milliseconds 500
+    if ((Test-Path $out) -and ((Get-Item $out).Length -gt 0)) {
+        Start-Sleep -Milliseconds 1200   # let the second command finish writing
+        break
+    }
 }
-Start-Sleep -Seconds 1
 
+$info = Get-ScheduledTaskInfo -TaskName 'PhotoBoothPyCheck' -ErrorAction SilentlyContinue
 $result = if (Test-Path $out) { (Get-Content $out -Raw).Trim() } else { '' }
 
 Unregister-ScheduledTask -TaskName 'PhotoBoothPyCheck' -Confirm:$false -ErrorAction SilentlyContinue
-Remove-Item $out -ErrorAction SilentlyContinue
+Remove-Item $out, $bat -ErrorAction SilentlyContinue
 
 Write-Host ''
 if ($result) { $result -split "`n" | ForEach-Object { Write-Host ('  ' + $_.Trim()) } }
-else { Write-Host '  (no output - the task did not run)' }
+else {
+    Write-Host '  (no output from the SYSTEM task)'
+    if ($info) { Write-Host ('  task LastTaskResult = {0}' -f $info.LastTaskResult) }
+}
 Write-Host ''
 Write-Host ('-' * 64)
 
