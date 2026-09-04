@@ -276,6 +276,7 @@ def status():
         advertised_ip=ADVERTISED_IP,
         access_point=ADVERTISED_IP == AP_HOST_IP,
         https_ready=HTTPS_READY,
+        https_error=HTTPS_ERROR,
         booth_page=str(BOOTH_DIR / "index.html") if (BOOTH_DIR / "index.html").is_file() else None,
         server_time=datetime.now().isoformat(timespec="seconds"),
         uptime_seconds=int((datetime.now() - STARTED_AT).total_seconds()),
@@ -470,12 +471,20 @@ def server_error(_e):
 # access on a secure context.
 
 ADVERTISED_IP = advertised_ip()
-HTTPS_READY = CERT_FILE.is_file() and KEY_FILE.is_file()
+
+# Whether the TLS listener is actually accepting connections -- not merely
+# whether the certificate files are on disk. Those are different things: a
+# second instance holding port 5443 leaves the certificate perfectly valid and
+# the booth completely unreachable, which is exactly how this hid once.
+HTTPS_READY = False
+HTTPS_ERROR = None
 
 
 def _start_https():
-    """Run cheroot's TLS listener on a daemon thread. Returns True if started."""
-    if not HTTPS_READY:
+    """Run cheroot's TLS listener on a daemon thread. Returns True if bound."""
+    global HTTPS_READY, HTTPS_ERROR
+    if not (CERT_FILE.is_file() and KEY_FILE.is_file()):
+        HTTPS_ERROR = "no certificate"
         logger.error(
             "No certificate at %s -- HTTPS disabled and the iPad camera will "
             "NOT work. Generate one with: py make_cert.py", CERT_FILE
@@ -496,6 +505,7 @@ def _start_https():
         from cheroot.ssl.builtin import BuiltinSSLAdapter
         from cheroot.wsgi import Server as CherootServer
     except ImportError:
+        HTTPS_ERROR = "cheroot not installed"
         logger.error(
             "cheroot is not installed -- HTTPS disabled and the iPad camera "
             "will NOT work. Run: py -m pip install -r requirements.txt"
@@ -507,13 +517,28 @@ def _start_https():
     )
     server.ssl_adapter = BuiltinSSLAdapter(str(CERT_FILE), str(KEY_FILE))
 
+    try:
+        server.prepare()          # binds the socket; raises if the port is taken
+    except Exception as exc:
+        HTTPS_ERROR = str(exc)
+        logger.error("HTTPS listener could not bind port %d: %s", HTTPS_PORT, exc)
+        if "10048" in str(exc) or "already in use" in str(exc).lower():
+            logger.error(
+                "Another copy of this server is already running. Stop it first: "
+                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+                "Where-Object { $_.CommandLine -like '*app.py*' } | "
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+            )
+        return False
+
     def _run():
         try:
-            server.start()
+            server.serve()
         except Exception as exc:   # never take the HTTP listener down with it
-            logger.exception("HTTPS listener failed: %s", exc)
+            logger.exception("HTTPS listener stopped: %s", exc)
 
     threading.Thread(target=_run, daemon=True, name="https").start()
+    HTTPS_READY = True
     return True
 
 
@@ -527,10 +552,14 @@ if __name__ == "__main__":
 
     if ADVERTISED_IP == AP_HOST_IP:
         logger.info("Address:    %s -- this machine is the access point", ADVERTISED_IP)
+    elif os.environ.get("PHOTOBOOTH_ADVERTISED_IP"):
+        # Explicitly configured, so this is a router setup and the hotspot is
+        # irrelevant. Saying otherwise sends people chasing the wrong thing.
+        logger.info("Address:    %s (configured)", ADVERTISED_IP)
     else:
         logger.warning(
-            "Address:    %s -- NOT the hotspot gateway (%s). The mobile hotspot "
-            r"is probably off; run scripts\hotspot.ps1",
+            "Address:    %s -- not the hotspot gateway (%s) and no address was "
+            r"configured. On a hotspot setup, run scripts\hotspot.ps1",
             ADVERTISED_IP, AP_HOST_IP,
         )
 
