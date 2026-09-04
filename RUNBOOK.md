@@ -155,7 +155,19 @@ Every line should read OK. It also prints the two URLs you need next.
 Once per iPad:
 
 1. Join the booth Wi-Fi network.
-2. Open `http://192.168.137.1:5000/cert` in Safari and allow the download.
+2. Open `https://192.168.137.1:5443/cert` in Safari. It will warn *"This
+   Connection Is Not Private"* -- expected, since the certificate it is about
+   to hand you is the very thing that would make it trusted. Tap **Show
+   Details** -> **visit this website** -> **Visit Website**, then allow the
+   download.
+
+   Use the **https** address, not `http://...:5000/cert`. Current iOS Safari
+   upgrades typed addresses to HTTPS, tries TLS against the plain-HTTP port,
+   and simply hangs.
+
+   If it still hangs, turn off **iCloud Private Relay** (Settings -> your name
+   -> iCloud) and **Limit IP Address Tracking** (Settings -> Wi-Fi -> the (i)
+   next to the booth network). Both intercept local-network requests.
 3. Settings → General → VPN & Device Management → install the **PhotoBooth**
    profile.
 4. Settings → General → About → **Certificate Trust Settings** → turn on full
@@ -166,6 +178,32 @@ Once per iPad:
 
 Optional but worth it: turn on **Guided Access** (Settings → Accessibility) so
 guests can't leave the booth app.
+
+### Laptop mode: one click, no auto logon
+
+On a machine that is not dedicated to the booth -- a laptop someone also uses
+for other things -- skip `-EnableAutoLogon` and give the operator a button
+instead:
+
+```powershell
+.\install-shortcut.ps1
+```
+
+That puts **Start Photo Booth** on the Desktop. Double-clicking it brings up the
+Wi-Fi, starts the print server, checks the printer, and prints a green box when
+the booth is ready or a plain-English explanation when it is not. Closing the
+window stops the booth.
+
+Also stop the machine sleeping mid-event:
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change monitor-timeout-ac 0
+```
+
+The trade-off is explicit: without auto logon nothing starts by itself, so a
+power cut needs a person. Fine when the operator is present and the laptop is
+open; not good enough for an unattended mini PC.
 
 ### 7. Rehearse the failure
 

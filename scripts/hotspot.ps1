@@ -41,6 +41,21 @@ function Await($WinRtTask, $ResultType) {
     $netTask.Result
 }
 
+# ConfigureAccessPointAsync returns IAsyncAction, which carries no result and
+# so needs the non-generic AsTask overload. Passing it to Await above throws a
+# type-conversion error -- and because this script stops on any error, that
+# aborted it before it ever started tethering.
+$asTaskAction = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and
+    $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.FullName -eq 'Windows.Foundation.IAsyncAction'
+})[0]
+
+function AwaitAction($WinRtAction) {
+    $netTask = $asTaskAction.Invoke($null, @($WinRtAction))
+    $netTask.Wait(-1) | Out-Null
+}
+
 function Get-TetheringManager {
     $ni = [Windows.Networking.Connectivity.NetworkInformation, Windows.Networking.Connectivity, ContentType = WindowsRuntime]
 
@@ -72,8 +87,16 @@ if ($null -eq $mgr) {
 
 Write-Host ("Hotspot state : {0}" -f $mgr.TetheringOperationalState)
 Write-Host ("Client limit  : {0}" -f $mgr.MaxClientCount)
-$ap = $mgr.GetCurrentAccessPointConfiguration()
-Write-Host ("SSID          : {0}" -f $ap.Ssid)
+# Reporting only -- on some adapters this throws (0x83120006 when the profile
+# cannot tether). Never let it abort before the start attempt, which produces a
+# far more useful error.
+$ap = $null
+try {
+    $ap = $mgr.GetCurrentAccessPointConfiguration()
+} catch {
+    Write-Warning ("Could not read the access point configuration: {0}" -f $_.Exception.Message)
+}
+Write-Host ("SSID          : {0}" -f $(if ($ap) { $ap.Ssid } else { '(unavailable)' }))
 
 if ($Check) {
     Write-Host ''
@@ -87,9 +110,10 @@ if ($Ssid -or $Passphrase) {
     if ($Passphrase -and $Passphrase.Length -lt 8) {
         throw 'WPA2 passphrases must be at least 8 characters.'
     }
+    if ($null -eq $ap) { throw 'Cannot change the SSID: this adapter would not report its access point configuration.' }
     if ($Ssid) { $ap.Ssid = $Ssid }
     if ($Passphrase) { $ap.Passphrase = $Passphrase }
-    Await ($mgr.ConfigureAccessPointAsync($ap)) ([Windows.Networking.NetworkOperators.NetworkOperatorTetheringOperationResult]) | Out-Null
+    AwaitAction ($mgr.ConfigureAccessPointAsync($ap))
     Write-Host ("Reconfigured to SSID '{0}'." -f $ap.Ssid)
 }
 
