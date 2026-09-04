@@ -1647,6 +1647,8 @@
     var fd = new FormData();
     fd.append("image", new File([blob], jobId + ".jpg", { type: "image/jpeg" }));
     fd.append("job_id", jobId);
+    // The server slugifies this and dates the folder itself.
+    fd.append("event", (CONFIG && CONFIG.title) || "");
     fetch(PRINT_SERVER + "/save", { method: "POST", body: fd })
       .catch(function () { /* offline or no server: the strip is still on screen */ });
   }

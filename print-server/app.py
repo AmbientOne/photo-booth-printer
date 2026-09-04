@@ -109,6 +109,9 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 # job_id must be safe to use as a filename -- no paths, no traversal.
 JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# Event names come from whatever the host typed, so they are reduced to a known
+# character set rather than trusted as a path component.
+_SLUG_RE = re.compile(r"[^A-Za-z0-9]+")
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg"}
 JPEG_MAGIC = b"\xff\xd8\xff"
 
@@ -279,7 +282,7 @@ def status():
         prints_this_install=printed,
         max_upload_mb=round(MAX_UPLOAD_BYTES / 1024 / 1024, 1),
         data_dir=str(DATA_DIR),
-        captures=len(list(CAPTURE_DIR.glob("*.jpg"))),
+        captures=len(list(CAPTURE_DIR.rglob("*.jpg"))),
         advertised_ip=ADVERTISED_IP,
         access_point=ADVERTISED_IP == AP_HOST_IP,
         https_ready=HTTPS_READY,
@@ -406,6 +409,16 @@ def print_photo():
             _in_flight.discard(job_id)
 
 
+def _event_folder(name):
+    """A dated, filesystem-safe folder name for one event.
+
+    The date is the server's, not the client's: the booth's date field is free
+    text for the caption and may say anything at all.
+    """
+    slug = _SLUG_RE.sub("-", (name or "").strip()).strip("-").lower()[:48]
+    return datetime.now().strftime("%Y-%m-%d") + "_" + (slug or "untitled")
+
+
 @app.post("/save")
 def save_capture():
     """Archive a finished strip without printing it.
@@ -431,12 +444,14 @@ def save_capture():
     if head != JPEG_MAGIC:
         return jsonify(status="error", error="File content is not a JPEG"), 415
 
-    target = CAPTURE_DIR / (job_id + ".jpg")
+    folder = CAPTURE_DIR / _event_folder(request.form.get("event"))
+    target = folder / (job_id + ".jpg")
     if target.exists():
-        return jsonify(status="exists", job_id=job_id), 200
+        return jsonify(status="exists", job_id=job_id, folder=folder.name), 200
 
-    temp = CAPTURE_DIR / (job_id + ".jpg.tmp")
+    temp = folder / (job_id + ".jpg.tmp")
     try:
+        folder.mkdir(parents=True, exist_ok=True)
         file.save(temp)
         os.replace(temp, target)
     except Exception as exc:
@@ -449,7 +464,7 @@ def save_capture():
         return jsonify(status="error", job_id=job_id, error=str(exc)), 500
 
     logger.info("SAVED job=%s bytes=%d -> %s", job_id, target.stat().st_size, target)
-    return jsonify(status="saved", job_id=job_id, path=str(target)), 200
+    return jsonify(status="saved", job_id=job_id, folder=folder.name, path=str(target)), 200
 
 
 @app.get("/cert")
