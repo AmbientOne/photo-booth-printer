@@ -31,6 +31,7 @@ param(
     [Parameter(Mandatory = $true)][string]$ServerIP,
     [Parameter(Mandatory = $true)][string]$Subnet,
     [string]$Token,
+    [switch]$NoToken,
     [switch]$SkipFirewall
 )
 
@@ -98,9 +99,22 @@ Write-Host "      PHOTOBOOTH_ADVERTISED_IP = $ServerIP (machine scope)"
 # On a headless machine a random token is unhelpful: it is written to
 # C:\PhotoBooth\token.txt and nobody can read it without a monitor. Setting one
 # here makes the booth URL predictable from anywhere.
-if ($Token) {
+if ($NoToken -and $Token) { throw "Pass either -Token or -NoToken, not both." }
+
+if ($NoToken) {
+    # Only sane when the network itself is the perimeter: hidden SSID, long
+    # passphrase, nothing else on it. The booth URL then needs no ?k=, which
+    # is one less thing to get wrong when provisioning a device.
+    [Environment]::SetEnvironmentVariable("PHOTOBOOTH_AUTH", "off", "Machine")
+    [Environment]::SetEnvironmentVariable("PHOTOBOOTH_TOKEN", $null, "Machine")
+    Write-Host "      PHOTOBOOTH_AUTH = off"
+    Write-Warning "Printing is now open to anyone who can reach this machine."
+    Write-Warning "The Wi-Fi passphrase is the only thing protecting your media,"
+    Write-Warning "so make it long and do not give it to guests."
+} elseif ($Token) {
     if ($Token.Length -lt 8) { throw "Token should be at least 8 characters." }
     if ($Token -notmatch "^[A-Za-z0-9_-]+$") { throw "Token: letters, numbers, dash and underscore only, it goes in a URL." }
+    [Environment]::SetEnvironmentVariable("PHOTOBOOTH_AUTH", $null, "Machine")
     [Environment]::SetEnvironmentVariable("PHOTOBOOTH_TOKEN", $Token, "Machine")
     Write-Host "      PHOTOBOOTH_TOKEN set (machine scope)"
 } else {
@@ -200,10 +214,11 @@ Write-Host "  3. Turn OFF client isolation / AP isolation on the router, or the"
 Write-Host "     iPad cannot reach this machine."
 Write-Host ""
 Write-Host "  4. Restart, then run .\status.ps1 to confirm."
-if ($Token) {
+if ($Token -or $NoToken) {
+    $q = if ($NoToken) { "" } else { "?k=$Token" }
     Write-Host ""
     Write-Host "  Booth URL for the iPad:" -ForegroundColor Cyan
-    Write-Host "      https://${ServerIP}:5443/booth?k=$Token"
+    Write-Host "      https://${ServerIP}:5443/booth$q"
     Write-Host "  Certificate, first time only (accept the warning):" -ForegroundColor Cyan
     Write-Host "      https://${ServerIP}:5443/cert"
 }

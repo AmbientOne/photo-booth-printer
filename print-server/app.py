@@ -207,11 +207,21 @@ def _seed_printed_jobs():
 _seed_printed_jobs()
 
 # ------------------------------------------------------------------ auth ----
-# Anyone on the Wi-Fi can reach this port, so /print requires a shared secret.
-# The booth picks it up from ?k=<token> once and remembers it; a stranger on
-# the network can load the page but cannot spend your media.
+# Anyone on the Wi-Fi can reach this port, so by default /print requires a
+# shared secret. The booth picks it up from ?k=<token> once and remembers it; a
+# stranger on the network can load the page but cannot spend your media.
+#
+# Set PHOTOBOOTH_AUTH=off to drop that. Reasonable only when the network itself
+# is the perimeter -- a hidden SSID, a long passphrase, nobody but the booth on
+# it -- because then the token is a third lock behind two better ones, and the
+# ?k= URL is one more thing to get wrong when provisioning a device. On any
+# shared or venue network, leave it on: it is the only thing standing between a
+# stranger and a roll of media.
 
 TOKEN_FILE = DATA_DIR / "token.txt"
+
+_auth_setting = os.environ.get("PHOTOBOOTH_AUTH", "").strip().lower()
+AUTH_ENABLED = _auth_setting not in ("off", "0", "no", "none", "false")
 
 
 def _load_token():
@@ -233,11 +243,13 @@ def _load_token():
     return fresh
 
 
-TOKEN = _load_token()
+TOKEN = _load_token() if AUTH_ENABLED else ""
 
 
 def _token_ok():
     """Constant-time check of the header, with a form field as fallback."""
+    if not AUTH_ENABLED:
+        return True
     supplied = request.headers.get("X-Booth-Token") or request.form.get("token") or ""
     return hmac.compare_digest(str(supplied), str(TOKEN))
 
@@ -300,7 +312,7 @@ def status():
         sizes=sizes,
         default_size=DEFAULT_SIZE,
         dry_run=bool(_DRY_RUN_FOLDER),
-        auth_required=True,
+        auth_required=AUTH_ENABLED,
         hot_folder=str(default_folder),
         hot_folder_ready=hot_folder_ok,
         queued_in_hot_folder=len(list(default_folder.glob("*.jpg"))) if hot_folder_ok else None,
@@ -581,14 +593,20 @@ if __name__ == "__main__":
         _f = hot_folder_for(_name)
         logger.info("Size %-6s -> %s (exists=%s)", _name, _f, _f.is_dir())
 
+    query = "?k=" + TOKEN if AUTH_ENABLED else ""
     if _start_https():
         logger.info("HTTPS  on port %d (cheroot, cert %s)", HTTPS_PORT, CERT_FILE)
-        logger.info("Booth URL:  https://%s:%d/booth?k=%s", ADVERTISED_IP, HTTPS_PORT, TOKEN)
+        logger.info("Booth URL:  https://%s:%d/booth%s", ADVERTISED_IP, HTTPS_PORT, query)
     else:
-        logger.warning("Booth URL:  http://%s:%d/booth?k=%s  (no camera without HTTPS)",
-                       ADVERTISED_IP, PORT, TOKEN)
+        logger.warning("Booth URL:  http://%s:%d/booth%s  (no camera without HTTPS)",
+                       ADVERTISED_IP, PORT, query)
     logger.info("Trust cert: http://%s:%d/cert", ADVERTISED_IP, PORT)
-    logger.info("Token file: %s", TOKEN_FILE)
+    if AUTH_ENABLED:
+        logger.info("Token file: %s", TOKEN_FILE)
+    else:
+        logger.warning("PRINT AUTH DISABLED -- anyone who can reach this machine "
+                       "can print. The Wi-Fi passphrase is now the only thing "
+                       "protecting your media.")
     logger.info("=" * 60)
 
     from waitress import serve

@@ -115,6 +115,7 @@ py print-server/app.py
 | Variable | Default | Purpose |
 |---|---|---|
 | `PHOTOBOOTH_TOKEN` | generated, saved to disk | Shared secret for `POST /print` |
+| `PHOTOBOOTH_AUTH` | on | `off` disables the `/print` token check entirely |
 | `PHOTOBOOTH_DATA_DIR` | `C:\PhotoBooth` | Archive, logs, token |
 | `PHOTOBOOTH_HOT_FOLDER` | unset | Dry run: send every size here |
 | `PHOTOBOOTH_HOT_FOLDER_ROOT` | `C:\DNP\HotFolderPrint\Prints` | HFP install location |
@@ -129,6 +130,12 @@ only people who can reach it are the ones standing in the room.
 - `POST /print` requires a shared token, compared in constant time. Everything
   else — the booth page, `/status`, `/cert` — is deliberately open, since a
   device needs them before it has been provisioned.
+- `PHOTOBOOTH_AUTH=off` drops that check, and the booth URL then needs no `?k=`.
+  Defensible only where the network *is* the perimeter — a hidden SSID, a long
+  passphrase, nothing else on it — because the token is then a third lock
+  behind two better ones, and one more thing to get wrong when provisioning a
+  device. On a venue or shared network, leave it on: it is the only thing
+  between a stranger and a roll of media.
 - The firewall rule installed by `scripts/install.ps1` accepts connections from
   `192.168.137.0/24` only, so the ports are not exposed on any other network
   the machine later joins.
