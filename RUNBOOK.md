@@ -67,7 +67,39 @@ py -m pip install -r requirements.txt
 
 Python 3.10+ from python.org, with the `py` launcher, is assumed.
 
-### 2. Generate the certificate
+Windows blocks all PowerShell scripts by default, so allow local ones once
+(this needs no admin rights):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+`RemoteSigned` still blocks scripts downloaded from the internet while allowing
+these, which arrived via `git clone`. Without it every command below fails with
+*"running scripts is disabled on this system"*. The scheduled tasks registered
+later are unaffected either way -- they invoke PowerShell with an explicit
+`-ExecutionPolicy Bypass`, so the booth starts regardless of this setting.
+
+To run a single script without changing the policy at all:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\hotspot.ps1 -Check
+```
+
+### 2. Confirm the machine can host a hotspot
+
+```powershell
+cd C:\printer\scripts
+.\hotspot.ps1 -Check
+```
+
+This changes nothing and prints the hotspot state. If it reports that no
+usable network profile exists, the whole self-hosted-network approach will not
+work on this hardware -- stop here and use a travel router instead (the mini PC
+joins it by ethernet; set `PHOTOBOOTH_ADVERTISED_IP` and regenerate the
+certificate for that address). Everything below assumes this step passed.
+
+### 3. Generate the certificate
 
 ```powershell
 py make_cert.py
@@ -82,7 +114,7 @@ The CA's own private key is generated in memory and discarded. That matters:
 the iPad trusts this CA as a root, and a root whose key still existed on disk
 could be used to impersonate any website to that iPad.
 
-### 3. Configure the machine
+### 4. Configure the machine
 
 ```powershell
 cd C:\printer\scripts
@@ -98,7 +130,7 @@ the machine stops at the lock screen after a power cut and never starts the
 booth. It stores the account password in the registry in clear text, so use a
 machine dedicated to the booth.
 
-### 4. Restart, and confirm
+### 5. Restart, and confirm
 
 ```powershell
 .\status.ps1
@@ -106,7 +138,7 @@ machine dedicated to the booth.
 
 Every line should read OK. It also prints the two URLs you need next.
 
-### 5. Provision the iPad
+### 6. Provision the iPad
 
 Once per iPad:
 
@@ -123,7 +155,7 @@ Once per iPad:
 Optional but worth it: turn on **Guided Access** (Settings → Accessibility) so
 guests can't leave the booth app.
 
-### 6. Rehearse the failure
+### 7. Rehearse the failure
 
 Before the real event, pull the mini PC's power mid-session and turn it back
 on. Confirm the booth is serving again about a minute later without anyone
