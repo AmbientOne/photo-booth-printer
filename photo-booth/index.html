@@ -328,10 +328,10 @@
     <div class="setup-box">
       <h2>Photo Booth Setup</h2>
       <p class="hint">Set the event details. They appear on every photo.</p>
-      <div class="field"><label>Event Title</label><input id="f-title" type="text" placeholder="510 &amp; Park" /></div>
-      <div class="field"><label>Venue</label><input id="f-venue" type="text" placeholder="Play2WinSocial" /></div>
-      <div class="field"><label>Date</label><input id="f-date" type="text" placeholder="July 5th, 2026" /></div>
-      <div class="field"><label>Tagline</label><input id="f-tagline" type="text" placeholder="WINNERS CIRCLE" /></div>
+      <div class="field"><label>Event Title</label><input id="f-title" type="text" placeholder="Your event name" /></div>
+      <div class="field"><label>Venue</label><input id="f-venue" type="text" placeholder="Venue (optional)" /></div>
+      <div class="field"><label>Date</label><input id="f-date" type="text" placeholder="Date (optional)" /></div>
+      <div class="field"><label>Tagline</label><input id="f-tagline" type="text" placeholder="Tagline (optional)" /></div>
       <div class="field"><label>Theme</label><div class="presets" id="presets"></div></div>
       <div class="field"><div class="colors">
         <div class="cfield"><span>Accent</span><input id="f-accent" type="color" /></div>
@@ -447,8 +447,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
     <div class="home-inner">
-    <h1 class="title serif" id="home-title">510 &amp; Park</h1>
-    <div class="sub kicker"><span id="home-venue">Play2WinSocial</span><span class="dot">·</span>Photo Booth</div>
+    <h1 class="title serif" id="home-title"></h1>
+    <div class="sub kicker"><span id="home-venue"></span><span class="dot">·</span>Photo Booth</div>
     <div class="cards">
       <button class="mode-card" data-mode="strip" type="button">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="3" width="12" height="4.2" rx="1"/><rect x="6" y="9.9" width="12" height="4.2" rx="1"/><rect x="6" y="16.8" width="12" height="4.2" rx="1"/></svg></span>
@@ -457,7 +457,7 @@
       </button>
     </div>
     <button class="btn gallery-btn exp" id="gallery-btn" type="button" style="display:none">Gallery</button>
-    <div class="foot"><span class="tagline" id="home-tagline">WINNERS CIRCLE</span><span class="diamond">◆</span></div>
+    <div class="foot"><span class="tagline" id="home-tagline"></span><span class="diamond">◆</span></div>
     </div>
   </section>
 
@@ -564,10 +564,13 @@
 
   // ---------- Config ----------
   var DEFAULTS = {
-    title: "510 & Park",
-    venue: "Play2WinSocial",
-    date: "July 5th, 2026",
-    tagline: "WINNERS CIRCLE",
+    // No event content by default. A booth set up for someone else should not
+    // arrive carrying the last client's name, and blank fields now draw
+    // nothing, so an unconfigured booth prints a clean strip.
+    title: "",
+    venue: "",
+    date: "",
+    tagline: "",
     accent: "#c9a24b",
     bg: "#0c0b0a",
     card: "#fdfbf5",
@@ -767,9 +770,20 @@
   // ---------- Home rendering ----------
   function renderHome() {
     var c = CONFIG || DEFAULTS;
-    $("#home-title").textContent = c.title;
-    $("#home-venue").textContent = c.venue;
-    $("#home-tagline").textContent = c.tagline || DEFAULTS.tagline;
+    // Same rule as the printed strip: a field left blank should leave no trace.
+    // Without this an unnamed event shows a stray separator dot with nothing
+    // either side of it.
+    var title = (c.title || "").trim();
+    var venue = (c.venue || "").trim();
+    var tagline = (c.tagline || "").trim();
+    $("#home-title").textContent = title || "Photo Booth";
+    $("#home-venue").textContent = venue;
+    $("#home-venue").style.display = venue ? "" : "none";
+    var dot = document.querySelector(".sub .dot");
+    if (dot) dot.style.display = venue ? "" : "none";
+    $("#home-tagline").textContent = tagline;
+    var diamond = document.querySelector(".foot .diamond");
+    if (diamond) diamond.style.display = tagline ? "" : "none";
     var st = c.stripStyle === "grid" ? "2×2 Grid" : ((c.shots || 4) + "-Shot Strip");
     $("#strip-title").textContent = st;
     updateGalleryBtn();
