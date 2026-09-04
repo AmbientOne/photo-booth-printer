@@ -179,6 +179,37 @@ Once per iPad:
 Optional but worth it: turn on **Guided Access** (Settings → Accessibility) so
 guests can't leave the booth app.
 
+### Headless machines
+
+A mini PC with no monitor cannot show you the booth URL, and the token is
+generated randomly into `C:\PhotoBooth\token.txt` where nobody can read it.
+Choose the token instead, and the URL is knowable from anywhere:
+
+```powershell
+.\install-router.ps1 -ServerIP 192.168.8.2 -Subnet 192.168.8.0/24 -Token "yourbooth2026"
+```
+
+The installer then prints the full booth URL, and it stays the same across
+rebuilds. Letters, numbers, dash and underscore only, since it goes in a URL.
+
+Worth enabling remote access while a monitor is still attached, so you never
+need one again (elevated):
+
+```powershell
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+New-NetFirewallRule -DisplayName "SSH" -Direction Inbound -Action Allow `
+    -Protocol TCP -LocalPort 22 -RemoteAddress 192.168.8.0/24
+```
+
+Then from a laptop on the booth network: `ssh KIANA@192.168.8.2`, and
+`status.ps1` works over that connection like any other.
+
+Note that once an iPad has been provisioned it stores the token itself, so the
+home-screen icon keeps working without the URL. You only need it again when
+adding a new device or after clearing Safari data.
+
 ### Laptop mode: one click, no auto logon
 
 On a machine that is not dedicated to the booth -- a laptop someone also uses
