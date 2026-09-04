@@ -91,8 +91,7 @@ test("the font picker loads the chosen face before rendering", () => {
   const seg = SRC.match(/\$\(id\)\.addEventListener\("click", function \(e\) \{[\s\S]*?\n  \}\);/);
   assert.ok(seg, "segment click handler not found");
   assert.match(
-    seg[0], /ensureFonts\(renderStripPreview, getSeg\("#seg-font"\)\)/,
-    "the segment handler must render through ensureFonts with the selected " +
-    "family, or a newly chosen font renders as a fallback face"
+    seg[0], /renderStripPreview\(\)/,
+    "the segment handler must re-render the preview"
   );
 });

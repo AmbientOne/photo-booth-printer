@@ -105,6 +105,18 @@ test("the renderer draws through the face table, not fixed weights", () => {
   assert.match(body[0], /face\.venue/, "venue should use face.venue");
 });
 
+test("the preview waits for the font before its final draw", () => {
+  const re = new RegExp("\\n  function renderStripPreview\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}\\n");
+  const body = SRC.match(re);
+  assert.ok(body, "renderStripPreview not found");
+  assert.match(
+    body[0], /ensureFonts\(/,
+    "renderStripPreview must preload the selected face itself; leaving it to " +
+    "callers means any path that forgets renders in a fallback serif"
+  );
+  assert.match(body[0], /getSeg\("#seg-font"\)/, "it must use the family from the form");
+});
+
 test("ensureFonts loads both roles for the chosen family", () => {
   const body = SRC.match(/\n  function ensureFonts\([^)]*\) \{[\s\S]*?\n  \}\n/);
   assert.ok(body, "ensureFonts not found");

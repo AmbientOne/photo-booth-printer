@@ -880,7 +880,7 @@
       // Shot count lives in two places; keep them in step.
       if (id === "#seg-shots-main") setSeg("#seg-shots", b.getAttribute("data-val"));
       if (id === "#seg-shots") setSeg("#seg-shots-main", b.getAttribute("data-val"));
-      ensureFonts(renderStripPreview, getSeg("#seg-font"));
+      renderStripPreview();
     });
   });
 
@@ -915,8 +915,17 @@
     };
   }
 
-  function renderStripPreview() {
+  function renderStripPreview(fontsReady) {
     var cv = $("#strip-preview"); if (!cv) return;
+    var fam = getSeg("#seg-font") || DEFAULTS.font;
+    if (!fontsReady) {
+      // Draw once immediately so the panel never looks frozen, then again once
+      // the face has loaded. Canvas silently substitutes a generic serif for a
+      // font that has not arrived yet, which reads as the picker being broken.
+      renderStripPreview(true);
+      ensureFonts(function () { renderStripPreview(true); }, fam);
+      return;
+    }
     var n = parseInt(getSeg("#seg-shots-main") || "4", 10);
     // Caption text from the form so the preview matches what you're typing.
     previewText = {
