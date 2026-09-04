@@ -81,6 +81,14 @@ DEFAULT_SIZE = "4x6"
 _DRY_RUN_FOLDER = os.environ.get("PHOTOBOOTH_HOT_FOLDER")
 
 
+def free_mb():
+    """Free space on the data volume, or None if it cannot be determined."""
+    try:
+        return shutil.disk_usage(str(DATA_DIR)).free // (1024 * 1024)
+    except OSError:
+        return None
+
+
 def hot_folder_for(size):
     """Watched folder for a whitelisted print size."""
     if _DRY_RUN_FOLDER:
@@ -103,6 +111,13 @@ HTTPS_PORT = int(os.environ.get("PHOTOBOOTH_HTTPS_PORT", "5443"))
 CERT_FILE = CODE_DIR / "certs" / "cert.pem"   # leaf + issuer chain
 KEY_FILE = CODE_DIR / "certs" / "key.pem"     # leaf private key
 CA_FILE = CODE_DIR / "certs" / "ca.pem"       # the root the iPad installs
+
+# A full disk does not degrade gracefully: Hot Folder Print cannot write, the
+# server cannot archive, and Windows itself misbehaves. Stop accumulating well
+# before that. Optional copies are given up first, so printing keeps working
+# down to a much smaller reserve.
+MIN_FREE_MB_SAVE = int(os.environ.get("PHOTOBOOTH_MIN_FREE_MB_SAVE", "2048"))
+MIN_FREE_MB_PRINT = int(os.environ.get("PHOTOBOOTH_MIN_FREE_MB_PRINT", "512"))
 
 # A finished 4x6 booth JPEG is normally 1-4 MB. 25 MB is generous but bounded.
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -283,6 +298,8 @@ def status():
         max_upload_mb=round(MAX_UPLOAD_BYTES / 1024 / 1024, 1),
         data_dir=str(DATA_DIR),
         captures=len(list(CAPTURE_DIR.rglob("*.jpg"))),
+        disk_free_mb=free_mb(),
+        disk_low=(free_mb() is not None and free_mb() < MIN_FREE_MB_SAVE),
         advertised_ip=ADVERTISED_IP,
         access_point=ADVERTISED_IP == AP_HOST_IP,
         https_ready=HTTPS_READY,
@@ -340,6 +357,18 @@ def print_photo():
         return jsonify(
             status="error", error="File content is not a JPEG", job_id=job_id
         ), 415
+
+    free = free_mb()
+    if free is not None and free < MIN_FREE_MB_PRINT:
+        logger.error(
+            "PRINT REFUSED job=%s: only %d MB free, below the %d MB reserve",
+            job_id, free, MIN_FREE_MB_PRINT,
+        )
+        return jsonify(
+            status="error", job_id=job_id,
+            error="The booth PC is out of disk space. Ask your host.",
+            free_mb=free,
+        ), 507
 
     # Claim the job id before doing any work.
     with _lock:
@@ -443,6 +472,19 @@ def save_capture():
     file.stream.seek(0)
     if head != JPEG_MAGIC:
         return jsonify(status="error", error="File content is not a JPEG"), 415
+
+    free = free_mb()
+    if free is not None and free < MIN_FREE_MB_SAVE:
+        # Refuse the optional copy rather than let the disk fill and take
+        # printing down with it. The booth ignores this quietly.
+        logger.warning(
+            "SAVE REFUSED job=%s: only %d MB free, below the %d MB reserve",
+            job_id, free, MIN_FREE_MB_SAVE,
+        )
+        return jsonify(
+            status="error", job_id=job_id, error="Not enough disk space",
+            free_mb=free, required_mb=MIN_FREE_MB_SAVE,
+        ), 507
 
     folder = CAPTURE_DIR / _event_folder(request.form.get("event"))
     target = folder / (job_id + ".jpg")

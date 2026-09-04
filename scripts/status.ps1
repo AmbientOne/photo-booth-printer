@@ -133,8 +133,15 @@ if ($body) {
     Line 'HTTPS (camera)' ([bool]$body.https_ready) $(
         if ($body.https_ready) { 'certificate loaded' }
         else { 'no cert -> run: py ..\print-server\make_cert.py' })
+    # A full disk stops printing, so surface it before it happens.
+    if ($null -ne $body.disk_free_mb) {
+        Line 'Disk space' (-not $body.disk_low) (
+            "{0:N1} GB free{1}" -f ($body.disk_free_mb / 1024),
+            $(if ($body.disk_low) { " -- extra copies are being refused; clear C:\PhotoBooth\captures" } else { "" }))
+    }
     Write-Host ''
     Write-Host ('  Prints this install : {0}' -f $body.prints_this_install)
+    Write-Host ('  Saved copies        : {0}' -f $body.captures)
     Write-Host ('  Queued at printer   : {0}' -f $body.queued_in_hot_folder)
     Write-Host ('  Uptime              : {0} min' -f [int]($body.uptime_seconds / 60))
 } elseif ($httpCode -ne 0) {
