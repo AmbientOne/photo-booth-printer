@@ -40,7 +40,7 @@ certificate generated before that change *does* have its key sitting in
 Removing the profile also drops it out of Certificate Trust Settings; there is
 no second toggle to undo.
 
-Then clear the camera permission and the saved token:
+Then clear the camera permission and stored site data:
 
 - Settings → Apps → Safari → Advanced → Website Data → remove the booth's
   address (`192.168.137.1`)
@@ -112,26 +112,7 @@ Decide a retention policy before the next event rather than after it.
 
 ---
 
-## 4. The print token
-
-`C:\PhotoBooth\token.txt` is the shared secret required by `POST /print`. The
-booth receives it once via `?k=<token>` and keeps it in the iPad's
-localStorage. Anyone on the network can still load the booth page and read
-`/status`, but cannot spend your media without it.
-
-Rotate it after an event where guests handled the iPad:
-
-```powershell
-Remove-Item C:\PhotoBooth\token.txt
-```
-
-A new token is generated at next start and written to
-`C:\PhotoBooth\logs\print_server.log`. Every device then needs the new `?k=`
-URL once.
-
----
-
-## 5. The server key
+## 4. The server key
 
 `print-server\certs\key.pem` is the private key for the server certificate.
 Losing it lets someone impersonate *this server* to a provisioned iPad — not
@@ -148,10 +129,11 @@ Doing only one leaves the risk in place.
 
 Not bugs to fix before an event, but be aware of them:
 
-- **No rate limiting.** A client holding the token can POST in a loop. Each
-  upload is capped at 25 MB but the count is not, so `archive\` can fill the
-  disk. Acceptable only because the network is private and the operator is
-  present.
+- **No authentication and no rate limiting.** Anyone who can reach the machine
+  can POST prints in a loop. Each upload is capped at 25 MB but the count is
+  not, so `archive\` can fill the disk. Acceptable only because the network is
+  private, hidden, and the operator is present. The Wi-Fi passphrase is the
+  entire security model -- treat it accordingly.
 - **Port 5000 is unencrypted** and serves `/booth` and `/cert`. It has to stay
   open so a new device can fetch the certificate. Once every device is
   provisioned it can be closed at the firewall, leaving only 5443.

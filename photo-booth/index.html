@@ -1557,18 +1557,6 @@
   })();
   var printedJobs = Object.create(null);   // guards double-taps on this device
 
-  // Shared secret for /print. Comes in once as ?k=<token> and is remembered,
-  // so a stranger on the same Wi-Fi can load the booth but cannot print.
-  var PRINT_TOKEN = (function () {
-    var k = null;
-    try {
-      k = new URLSearchParams(location.search).get("k");
-      if (k) localStorage.setItem("photobooth.token", k);
-      else k = localStorage.getItem("photobooth.token");
-    } catch (e) {}
-    return k || "";
-  })();
-
   function printCurrent() {
     if (!lastBlob) return;
     if (lastType !== "image/jpeg") { toast("Only photos can be printed"); return; }
@@ -1600,7 +1588,6 @@
     fetch(PRINT_SERVER + "/print", {
       method: "POST",
       body: fd,
-      headers: { "X-Booth-Token": PRINT_TOKEN },
       signal: ctrl.signal
     })
       .then(function (res) { return res.json(); })

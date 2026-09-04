@@ -111,13 +111,9 @@ if ($body) {
 }
 
 # --- what to open on the iPad ---------------------------------------------
-$tokenFile = 'C:\PhotoBooth\token.txt'
-if (Test-Path $tokenFile) {
-    $token = (Get-Content $tokenFile -Raw).Trim()
-    Write-Host ''
-    Write-Host 'Booth URL for the iPad:' -ForegroundColor Cyan
-    Write-Host "  https://${addr}:5443/booth?k=$token"
-    Write-Host 'Certificate, first time only (accept the warning):' -ForegroundColor Cyan
-    Write-Host "  https://${addr}:5443/cert"
-}
+Write-Host ''
+Write-Host 'Booth URL for the iPad:' -ForegroundColor Cyan
+Write-Host "  https://${addr}:5443/booth"
+Write-Host 'Certificate, first time only (accept the warning):' -ForegroundColor Cyan
+Write-Host "  https://${addr}:5443/cert"
 Write-Host ''

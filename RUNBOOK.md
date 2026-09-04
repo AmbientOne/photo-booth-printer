@@ -172,8 +172,7 @@ Once per iPad:
    profile.
 4. Settings → General → About → **Certificate Trust Settings** → turn on full
    trust for *PhotoBooth Local Root*.
-5. Open the booth URL that `status.ps1` printed, including the `?k=` token.
-   The token is saved in the browser, so later visits don't need it.
+5. Open the booth URL that `status.ps1` printed.
 6. Share → **Add to Home Screen**, so the operator has one icon to tap.
 
 Optional but worth it: turn on **Guided Access** (Settings → Accessibility) so
@@ -199,16 +198,10 @@ should be long. This is about not being noticed in the first place.
 
 ### Headless machines
 
-A mini PC with no monitor cannot show you the booth URL, and the token is
-generated randomly into `C:\PhotoBooth\token.txt` where nobody can read it.
-Choose the token instead, and the URL is knowable from anywhere:
+A mini PC with no monitor is fine: the booth URL is just the machine's address,
+with nothing secret in it.
 
-```powershell
-.\install-router.ps1 -ServerIP 192.168.8.2 -Subnet 192.168.8.0/24 -Token "yourbooth2026"
-```
-
-The installer then prints the full booth URL, and it stays the same across
-rebuilds. Letters, numbers, dash and underscore only, since it goes in a URL.
+    https://192.168.8.2:5443/booth
 
 Worth enabling remote access while a monitor is still attached, so you never
 need one again (elevated):
@@ -223,10 +216,6 @@ New-NetFirewallRule -DisplayName "SSH" -Direction Inbound -Action Allow `
 
 Then from a laptop on the booth network: `ssh KIANA@192.168.8.2`, and
 `status.ps1` works over that connection like any other.
-
-Note that once an iPad has been provisioned it stores the token itself, so the
-home-screen icon keeps working without the URL. You only need it again when
-adding a new device or after clearing Safari data.
 
 ### Laptop mode: one click, no auto logon
 

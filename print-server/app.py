@@ -6,6 +6,11 @@ archives a master copy, and drops a print copy into the DNP Hot Folder Print
 watched folder for the DS620A. Hot Folder Print does the actual printing --
 this server never talks to the printer directly.
 
+There is no authentication on /print. The private network is the only
+perimeter: anyone who can reach this machine can print. That is a deliberate
+trade for a booth on its own hidden Wi-Fi with the operator present -- do not
+put it on a venue or shared network.
+
 The mini PC runs its own Wi-Fi access point (Windows Mobile Hotspot), so the
 booth does not depend on venue Wi-Fi and the server's address is the fixed ICS
 gateway 192.168.137.1 rather than whatever DHCP hands out that evening.
@@ -18,11 +23,9 @@ Layout:
 Run:  py app.py          (or let the scheduled task start it -- see scripts\)
 """
 
-import hmac
 import logging
 import os
 import re
-import secrets
 import shutil
 import socket
 import threading
@@ -206,54 +209,6 @@ def _seed_printed_jobs():
 
 _seed_printed_jobs()
 
-# ------------------------------------------------------------------ auth ----
-# Anyone on the Wi-Fi can reach this port, so by default /print requires a
-# shared secret. The booth picks it up from ?k=<token> once and remembers it; a
-# stranger on the network can load the page but cannot spend your media.
-#
-# Set PHOTOBOOTH_AUTH=off to drop that. Reasonable only when the network itself
-# is the perimeter -- a hidden SSID, a long passphrase, nobody but the booth on
-# it -- because then the token is a third lock behind two better ones, and the
-# ?k= URL is one more thing to get wrong when provisioning a device. On any
-# shared or venue network, leave it on: it is the only thing standing between a
-# stranger and a roll of media.
-
-TOKEN_FILE = DATA_DIR / "token.txt"
-
-_auth_setting = os.environ.get("PHOTOBOOTH_AUTH", "").strip().lower()
-AUTH_ENABLED = _auth_setting not in ("off", "0", "no", "none", "false")
-
-
-def _load_token():
-    env = os.environ.get("PHOTOBOOTH_TOKEN")
-    if env:
-        return env.strip()
-    try:
-        if TOKEN_FILE.is_file():
-            existing = TOKEN_FILE.read_text(encoding="utf-8").strip()
-            if existing:
-                return existing
-    except OSError:
-        pass
-    fresh = secrets.token_hex(8)
-    try:
-        TOKEN_FILE.write_text(fresh, encoding="utf-8")
-    except OSError as exc:
-        logger.warning("Could not save token to %s: %s", TOKEN_FILE, exc)
-    return fresh
-
-
-TOKEN = _load_token() if AUTH_ENABLED else ""
-
-
-def _token_ok():
-    """Constant-time check of the header, with a form field as fallback."""
-    if not AUTH_ENABLED:
-        return True
-    supplied = request.headers.get("X-Booth-Token") or request.form.get("token") or ""
-    return hmac.compare_digest(str(supplied), str(TOKEN))
-
-
 def _sweep_stale_temp():
     """Remove half-written .jpg.tmp files left by a crash mid-copy.
 
@@ -312,7 +267,6 @@ def status():
         sizes=sizes,
         default_size=DEFAULT_SIZE,
         dry_run=bool(_DRY_RUN_FOLDER),
-        auth_required=AUTH_ENABLED,
         hot_folder=str(default_folder),
         hot_folder_ready=hot_folder_ok,
         queued_in_hot_folder=len(list(default_folder.glob("*.jpg"))) if hot_folder_ok else None,
@@ -331,13 +285,6 @@ def status():
 
 @app.post("/print")
 def print_photo():
-    if not _token_ok():
-        logger.warning("UNAUTHORIZED print attempt from %s", _client_ip())
-        return jsonify(
-            status="error",
-            error="Missing or invalid token. Open the booth with ?k=<token>.",
-        ), 401
-
     job_id = (request.form.get("job_id") or "").strip()
     size = (request.form.get("size") or DEFAULT_SIZE).strip()
     file = request.files.get("image")
@@ -593,20 +540,13 @@ if __name__ == "__main__":
         _f = hot_folder_for(_name)
         logger.info("Size %-6s -> %s (exists=%s)", _name, _f, _f.is_dir())
 
-    query = "?k=" + TOKEN if AUTH_ENABLED else ""
     if _start_https():
         logger.info("HTTPS  on port %d (cheroot, cert %s)", HTTPS_PORT, CERT_FILE)
-        logger.info("Booth URL:  https://%s:%d/booth%s", ADVERTISED_IP, HTTPS_PORT, query)
+        logger.info("Booth URL:  https://%s:%d/booth", ADVERTISED_IP, HTTPS_PORT)
     else:
-        logger.warning("Booth URL:  http://%s:%d/booth%s  (no camera without HTTPS)",
-                       ADVERTISED_IP, PORT, query)
+        logger.warning("Booth URL:  http://%s:%d/booth  (no camera without HTTPS)",
+                       ADVERTISED_IP, PORT)
     logger.info("Trust cert: http://%s:%d/cert", ADVERTISED_IP, PORT)
-    if AUTH_ENABLED:
-        logger.info("Token file: %s", TOKEN_FILE)
-    else:
-        logger.warning("PRINT AUTH DISABLED -- anyone who can reach this machine "
-                       "can print. The Wi-Fi passphrase is now the only thing "
-                       "protecting your media.")
     logger.info("=" * 60)
 
     from waitress import serve

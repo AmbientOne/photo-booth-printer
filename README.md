@@ -66,7 +66,7 @@ from the design completely.
 | `RUNBOOK.md` | Operator instructions and one-time machine setup. |
 | `SECURITY-CLEANUP.md` | How to undo everything on the PC and the iPad. |
 
-Photos, logs and the print token live in `C:\PhotoBooth`, outside the checkout.
+Photos and logs live in `C:\PhotoBooth`, outside the checkout.
 
 ## Design notes
 
@@ -114,9 +114,7 @@ py print-server/app.py
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PHOTOBOOTH_TOKEN` | generated, saved to disk | Shared secret for `POST /print` |
-| `PHOTOBOOTH_AUTH` | on | `off` disables the `/print` token check entirely |
-| `PHOTOBOOTH_DATA_DIR` | `C:\PhotoBooth` | Archive, logs, token |
+| `PHOTOBOOTH_DATA_DIR` | `C:\PhotoBooth` | Archive and logs |
 | `PHOTOBOOTH_HOT_FOLDER` | unset | Dry run: send every size here |
 | `PHOTOBOOTH_HOT_FOLDER_ROOT` | `C:\DNP\HotFolderPrint\Prints` | HFP install location |
 | `PHOTOBOOTH_ADVERTISED_IP` | auto-detected | Address used in logged URLs and the cert check |
@@ -127,21 +125,19 @@ py print-server/app.py
 This is a **local-network appliance**, not an internet service. It assumes the
 only people who can reach it are the ones standing in the room.
 
-- `POST /print` requires a shared token, compared in constant time. Everything
-  else — the booth page, `/status`, `/cert` — is deliberately open, since a
-  device needs them before it has been provisioned.
-- `PHOTOBOOTH_AUTH=off` drops that check, and the booth URL then needs no `?k=`.
-  Defensible only where the network *is* the perimeter — a hidden SSID, a long
-  passphrase, nothing else on it — because the token is then a third lock
-  behind two better ones, and one more thing to get wrong when provisioning a
-  device. On a venue or shared network, leave it on: it is the only thing
-  between a stranger and a roll of media.
+- **There is no authentication.** Anyone who can reach the machine can print.
+  The network is the entire perimeter, so it has to be one you control: a
+  hidden SSID, a long passphrase, and nothing else on it. Earlier versions
+  required a shared token on `/print`; it was removed because on a private
+  booth network it was a third lock behind two better ones, and one more thing
+  to get wrong when provisioning a device. **Do not put this on a venue or
+  shared network.**
 - The firewall rule installed by `scripts/install.ps1` accepts connections from
   `192.168.137.0/24` only, so the ports are not exposed on any other network
   the machine later joins.
-- **There is no rate limiting.** A client holding the token can print in a loop.
-  On a private network with the operator present that is an acceptable trade;
-  on any wider network it would not be.
+- **There is no rate limiting.** A client can print in a loop. On a private
+  network with the operator present that is an acceptable trade; on any wider
+  network it would not be.
 - `archive/` holds a copy of every printed photo, guests' faces included.
   Decide a retention policy before an event, not after. See
   [SECURITY-CLEANUP.md](SECURITY-CLEANUP.md).
