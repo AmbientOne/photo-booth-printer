@@ -791,6 +791,7 @@
   var pendingLogo = null, pendingOverlay = null;
   var idleTimer = null;
   var galleryReturn = "home";
+  var imageCapture = null;  // ImageCapture bound to the current stream's track, or null if unsupported
 
   function show(name) {
     Object.keys(screens).forEach(function (k) {
@@ -1178,6 +1179,7 @@
   // ---------- Camera ----------
   function stopCamera() {
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    imageCapture = null;
   }
   function modeLabel() {
     return "Photo Strip";
@@ -1198,7 +1200,21 @@
     }).then(function (s) {
       stream = s; video.srcObject = s; video.play().catch(function () {});
       logCameraInfo(s);
+      setUpImageCapture(s);
     }).catch(function () { camErr.classList.add("show"); });
+  }
+
+  // ImageCapture (Safari 18.4+) can reach the OS still-photo pipeline, which
+  // is not bound by getUserMedia's usually-much-lower video-streaming
+  // resolution cap. Older Safari has no such constructor at all, so this is
+  // just null there and captureFrame() always uses grabFrame() instead.
+  function setUpImageCapture(s) {
+    imageCapture = null;
+    if (typeof window.ImageCapture !== "function") return;
+    try {
+      var track = s.getVideoTracks()[0];
+      if (track) imageCapture = new ImageCapture(track);
+    } catch (e) { imageCapture = null; }
   }
 
   // Diagnostic only -- tells us what the iPad actually handed back, since
@@ -1238,18 +1254,19 @@
     function next(idx) {
       if (idx >= total) return finish(shots);
       countdownThen(function () {
-        var frame = grabFrame();
-        shots.push(frame);
-        if (total > 1) {
-          dotsEl.children[idx].classList.add("done");
-          // Cosmetic corner preview only -- encoded just for this <img>, never
-          // fed back into the strip. The full-resolution canvas in shots[] is
-          // what actually gets printed.
-          shotThumb.src = frame.toDataURL("image/jpeg", 0.7);
-          shotThumb.style.display = "block";
-        }
-        if (idx + 1 < total) setTimeout(function () { next(idx + 1); }, 700);
-        else next(idx + 1);
+        captureFrame().then(function (frame) {
+          shots.push(frame);
+          if (total > 1) {
+            dotsEl.children[idx].classList.add("done");
+            // Cosmetic corner preview only -- encoded just for this <img>, never
+            // fed back into the strip. The full-resolution canvas in shots[] is
+            // what actually gets printed.
+            shotThumb.src = frame.toDataURL("image/jpeg", 0.7);
+            shotThumb.style.display = "block";
+          }
+          if (idx + 1 < total) setTimeout(function () { next(idx + 1); }, 700);
+          else next(idx + 1);
+        });
       });
     }
     next(0);
@@ -1302,7 +1319,57 @@
     return c;
   }
 
-  // shots are already canvases (see grabFrame), so there is nothing async left
+  // Longest edge to keep a still-photo capture at. takePhoto() can hand back
+  // a full sensor-resolution photo (12MP+); storing that uncapped, times up
+  // to five retained shots, is the kind of memory spike that can get an
+  // unattended iPad tab killed mid-event. 2400px is still well above what the
+  // video track can ever deliver, with headroom to spare.
+  var MAX_STILL_DIM = 2400;
+
+  // Draws a captured ImageBitmap onto a canvas, matching the mirroring
+  // grabFrame() applies for the front camera so a still capture looks
+  // identical to a video-frame one, and downscales to MAX_STILL_DIM if the
+  // sensor handed back more than that. Closes the bitmap once drawn -- it is
+  // backed by native memory that a JS GC pass will not reliably reclaim
+  // promptly on its own.
+  function bitmapToCanvas(bitmap) {
+    var bw = bitmap.width, bh = bitmap.height;
+    var scale = Math.min(1, MAX_STILL_DIM / Math.max(bw, bh));
+    var w = Math.round(bw * scale), h = Math.round(bh * scale);
+    var c = document.createElement("canvas"); c.width = w; c.height = h;
+    var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    if (facing === "user") { ctx.translate(w, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    console.log("[booth capture] still frame (takePhoto)", bw + "x" + bh, "-> stored", w + "x" + h);
+    return c;
+  }
+
+  // Tries a true still-photo capture through ImageCapture, falling back to
+  // the video-frame grab on any unsupported browser, rejected promise, or a
+  // capture that is taking too long to risk stalling the booth. Always
+  // resolves -- callers never need their own fallback branch.
+  var STILL_CAPTURE_TIMEOUT_MS = 1200;
+  function captureFrame() {
+    if (!imageCapture || typeof imageCapture.takePhoto !== "function") {
+      return Promise.resolve(grabFrame());
+    }
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error("takePhoto timed out")); }, STILL_CAPTURE_TIMEOUT_MS);
+    });
+    var still = imageCapture.takePhoto().then(function (blob) {
+      // "from-image" bakes in the EXIF orientation a real photo capture can
+      // carry, which drawImage(video,...) never had to deal with.
+      return createImageBitmap(blob, { imageOrientation: "from-image" });
+    }).then(bitmapToCanvas);
+    return Promise.race([still, timeout]).catch(function (err) {
+      console.warn("[booth capture] still capture unavailable, using video frame instead:", err && err.message);
+      return grabFrame();
+    });
+  }
+
+  // shots are already canvases (see grabFrame/captureFrame), so there is nothing async left
   // to wait on -- no decode, no onload, no possibility of racing a partial
   // image into the strip.
   function finish(shots) {
