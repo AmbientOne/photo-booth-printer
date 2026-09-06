@@ -822,6 +822,7 @@
   var idleTimer = null;
   var galleryReturn = "home";
   var imageCapture = null;  // ImageCapture bound to the current stream's track, or null if unsupported
+  var warmupCapture = null; // throwaway takePhoto() promise to settle exposure before the first real shot
 
   function show(name) {
     Object.keys(screens).forEach(function (k) {
@@ -1296,6 +1297,7 @@
   function stopCamera() {
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
     imageCapture = null;
+    warmupCapture = null;
   }
   function modeLabel() {
     return "Photo Strip";
@@ -1326,24 +1328,45 @@
   // just null there and captureFrame() always uses grabFrame() instead.
   function setUpImageCapture(s) {
     imageCapture = null;
+    warmupCapture = null;
     if (typeof window.ImageCapture !== "function") return;
     try {
       var track = s.getVideoTracks()[0];
       if (track) imageCapture = new ImageCapture(track);
     } catch (e) { imageCapture = null; }
-    if (!imageCapture || typeof imageCapture.getPhotoCapabilities !== "function") return;
-    // Diagnostic only. Explicitly requesting this reported max via
-    // takePhoto({imageWidth, imageHeight}) was tried in production and made
-    // takePhoto() fail outright on real hardware ("Internal error" / "IPC
-    // Connection closed") -- the request itself destabilizes the camera's IPC
-    // on at least this device, for no quality gain once it fails and falls
-    // back anyway. Left in only to see the gap between what a camera claims
-    // and what takePhoto() actually, safely delivers.
-    imageCapture.getPhotoCapabilities().then(function (caps) {
-      boothLog("[booth camera] photo capabilities " + JSON.stringify(caps));
-    }).catch(function (err) {
-      boothLog("[booth camera] getPhotoCapabilities unavailable: " + (err && err.message));
-    });
+    if (!imageCapture) return;
+
+    if (typeof imageCapture.getPhotoCapabilities === "function") {
+      // Diagnostic only. Explicitly requesting this reported max via
+      // takePhoto({imageWidth, imageHeight}) was tried in production and made
+      // takePhoto() fail outright on real hardware ("Internal error" / "IPC
+      // Connection closed") -- the request itself destabilizes the camera's IPC
+      // on at least this device, for no quality gain once it fails and falls
+      // back anyway. Left in only to see the gap between what a camera claims
+      // and what takePhoto() actually, safely delivers.
+      imageCapture.getPhotoCapabilities().then(function (caps) {
+        boothLog("[booth camera] photo capabilities " + JSON.stringify(caps));
+      }).catch(function (err) {
+        boothLog("[booth camera] getPhotoCapabilities unavailable: " + (err && err.message));
+      });
+    }
+
+    if (typeof imageCapture.takePhoto === "function") {
+      // Seen in production: the first real photo of a freshly-opened camera
+      // session came out visibly darker than the next two, same code, same
+      // settings -- consistent with the sensor's exposure still settling on
+      // the very first still-capture call of a session. This throwaway
+      // capture's result is discarded entirely; its only purpose is letting
+      // that settling happen before the guest's actual first shot.
+      // captureFrame() awaits this (see warmupCapture) so it can never
+      // overlap with a real capture -- concurrent takePhoto() calls are
+      // exactly what produced the "IPC Connection closed" failures above.
+      warmupCapture = imageCapture.takePhoto().then(function () {
+        boothLog("[booth capture] warm-up capture complete");
+      }, function (err) {
+        boothLog("[booth capture] warm-up capture failed (harmless): " + (err && err.message));
+      });
+    }
   }
 
   // Diagnostic only -- tells us what the iPad actually handed back, since
@@ -1497,6 +1520,16 @@
     if (mode === "video" || !imageCapture || typeof imageCapture.takePhoto !== "function") {
       return Promise.resolve(grabFrame());
     }
+    // Let any in-flight warm-up capture (see setUpImageCapture) finish first
+    // -- it never rejects, so this never needs its own catch -- consumed
+    // once so shots 2+ of the same strip never wait on it again. The
+    // timeout below starts only once the real capture actually begins, so
+    // it always gets its full budget regardless of warm-up time.
+    var afterWarmup = warmupCapture ? warmupCapture.then(function () {}) : Promise.resolve();
+    warmupCapture = null;
+    return afterWarmup.then(function () { return captureStillOrFallback(mode); });
+  }
+  function captureStillOrFallback(mode) {
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject(new Error("takePhoto timed out")); }, STILL_CAPTURE_TIMEOUT_MS);
     });
