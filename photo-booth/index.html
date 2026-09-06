@@ -1006,6 +1006,7 @@
       previewText = null;
     }
     var ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(full, 0, 0, cv.width, cv.height);
     // Show where the DS620 trims.
@@ -1054,7 +1055,9 @@
         var s = Math.min(1, maxDim / Math.max(im.width, im.height));
         var w = Math.round(im.width * s), h = Math.round(im.height * s);
         var c = document.createElement("canvas"); c.width = w; c.height = h;
-        c.getContext("2d").drawImage(im, 0, 0, w, h);
+        var lc = c.getContext("2d");
+        lc.imageSmoothingEnabled = true; lc.imageSmoothingQuality = "high";
+        lc.drawImage(im, 0, 0, w, h);
         cb(c.toDataURL("image/png"));
       };
       im.src = fr.result;
@@ -1186,11 +1189,32 @@
     video.classList.toggle("mirror", facing === "user");
     show("camera");
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camErr.classList.add("show"); return; }
+    // 4:3 ideal, not square: no camera sensor is natively 1:1, and asking for
+    // an aspect nothing can satisfy leaves the browser's constraint solver
+    // free to trade away resolution instead. The final crop is "cover" onto
+    // each strip cell regardless of what aspect the stream actually is.
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1920 } }, audio: false
+      video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
     }).then(function (s) {
       stream = s; video.srcObject = s; video.play().catch(function () {});
+      logCameraInfo(s);
     }).catch(function () { camErr.classList.add("show"); });
+  }
+
+  // Diagnostic only -- tells us what the iPad actually handed back, since
+  // "ideal" constraints are a preference, not a guarantee. Safe to leave on
+  // in production: console logging costs nothing a guest can see or feel.
+  function logCameraInfo(s) {
+    var track = s.getVideoTracks()[0];
+    if (!track) return;
+    var settings = track.getSettings ? track.getSettings() : null;
+    var caps = track.getCapabilities ? (function () { try { return track.getCapabilities(); } catch (e) { return null; } })() : null;
+    console.log("[booth camera] track.getSettings()", settings);
+    if (caps) console.log("[booth camera] track.getCapabilities()", caps);
+    var logVideoSize = function () {
+      console.log("[booth camera] video.videoWidth/Height", video.videoWidth, video.videoHeight);
+    };
+    if (video.videoWidth) logVideoSize(); else video.addEventListener("loadedmetadata", logVideoSize, { once: true });
   }
 
   shutter.addEventListener("click", function () {
@@ -1216,7 +1240,14 @@
       countdownThen(function () {
         var frame = grabFrame();
         shots.push(frame);
-        if (total > 1) { dotsEl.children[idx].classList.add("done"); shotThumb.src = frame; shotThumb.style.display = "block"; }
+        if (total > 1) {
+          dotsEl.children[idx].classList.add("done");
+          // Cosmetic corner preview only -- encoded just for this <img>, never
+          // fed back into the strip. The full-resolution canvas in shots[] is
+          // what actually gets printed.
+          shotThumb.src = frame.toDataURL("image/jpeg", 0.7);
+          shotThumb.style.display = "block";
+        }
         if (idx + 1 < total) setTimeout(function () { next(idx + 1); }, 700);
         else next(idx + 1);
       });
@@ -1255,22 +1286,27 @@
     }, 1000);
   }
 
+  // Returns the captured frame as a canvas, not an encoded JPEG. Every shot
+  // used to be encoded here and decoded again in finish() before ever
+  // reaching the strip -- a full JPEG generation lost for no reason, on top
+  // of the one encode the final strip actually needs. The canvas is already a
+  // valid drawImage() source, so renderStrip() takes it as-is.
   function grabFrame() {
     var vw = video.videoWidth, vh = video.videoHeight;
     var c = document.createElement("canvas"); c.width = vw; c.height = vh;
     var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     if (facing === "user") { ctx.translate(vw, 0); ctx.scale(-1, 1); }
     ctx.drawImage(video, 0, 0, vw, vh);
-    return c.toDataURL("image/jpeg", 0.95);
+    console.log("[booth capture] frame", vw + "x" + vh);
+    return c;
   }
 
+  // shots are already canvases (see grabFrame), so there is nothing async left
+  // to wait on -- no decode, no onload, no possibility of racing a partial
+  // image into the strip.
   function finish(shots) {
-    var imgs = shots.map(function (src) { var im = new Image(); im.src = src; return im; });
-    var pending = imgs.length;
-    imgs.forEach(function (im) {
-      if (im.complete) { if (--pending === 0) composite(imgs); }
-      else im.onload = function () { if (--pending === 0) composite(imgs); };
-    });
+    composite(shots);
   }
 
   // The stylesheet requests specific weights per family. Asking canvas for a
@@ -1349,7 +1385,11 @@
   }
   function renderCurrent(isNew) {
     var canvas = renderStrip(lastImgs);
-    canvas.toBlob(function (blob) { setResult(blob, "image/jpeg", isNew); }, "image/jpeg", 0.95);
+    canvas.toBlob(function (blob) {
+      console.log("[booth capture] final canvas", canvas.width + "x" + canvas.height,
+        "blob", blob.type, blob.size + " bytes");
+      setResult(blob, "image/jpeg", isNew);
+    }, "image/jpeg", 0.95);
   }
   function setResult(blob, type, isNew) {
     lastBlob = blob; lastType = type;
@@ -1534,6 +1574,7 @@
     var t = document.createElement("canvas");
     t.width = w; t.height = h;
     var tc = t.getContext("2d");
+    tc.imageSmoothingEnabled = true; tc.imageSmoothingQuality = "high";
     tc.fillStyle = "#000"; tc.fillRect(0, 0, w, h);
     drawCover(tc, img, 0, 0, w, h);
     ctx.save();
@@ -1569,6 +1610,7 @@
 
     var c = document.createElement("canvas"); c.width = W; c.height = H;
     var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = theme.card; ctx.fillRect(0, 0, W, H);
 
     if (d.border !== "none") {
@@ -1606,6 +1648,7 @@
     var H = gridBottom + (hasLogo ? 300 : 240);
     var c = document.createElement("canvas"); c.width = W; c.height = H;
     var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = theme.card; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = theme.border; ctx.lineWidth = 2.5; ctx.strokeRect(14, 14, W - 28, H - 28);
     for (var i = 0; i < 4; i++) {
