@@ -271,6 +271,32 @@ def _client_ip():
     return request.remote_addr or "?"
 
 
+# The booth runs unattended with no visible console -- this is what lets the
+# iPad's own camera/capture diagnostics land in the one log file already being
+# watched on the mini PC, instead of being stuck in Safari's console where
+# only a tethered Mac can read them.
+MAX_LOG_MESSAGE_CHARS = 2000
+LOG_LEVELS = {"info", "warn", "error"}
+
+
+@app.post("/log")
+def booth_log():
+    """Best-effort diagnostic line from the booth page. Never touches
+    printing; a malformed body is just dropped rather than erroring loudly."""
+    data = request.get_json(silent=True) or {}
+    level = data.get("level")
+    if level not in LOG_LEVELS:
+        level = "info"
+    message = data.get("message")
+    if not isinstance(message, str) or not message:
+        return jsonify(status="error", error="Missing 'message'"), 400
+    logger.log(
+        logging.WARNING if level in ("warn", "error") else logging.INFO,
+        "BOOTH %s: %s", _client_ip(), message[:MAX_LOG_MESSAGE_CHARS],
+    )
+    return jsonify(status="ok"), 200
+
+
 @app.get("/status")
 def status():
     """Health check the iPad can poll before enabling the Print button."""

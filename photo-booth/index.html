@@ -808,6 +808,23 @@
     toast._t = setTimeout(function () { toastEl.classList.remove("show"); }, 2600);
   }
 
+  // The booth runs unattended with no visible console, so camera/capture
+  // diagnostics also get forwarded to the print server's own log file --
+  // otherwise they are stuck in Safari's console where only a Mac tethered to
+  // this exact iPad could ever read them. Always logs locally too; the
+  // network hop is best-effort and must never block or throw.
+  function boothLog(msg) { console.log(msg); sendBoothLog("info", msg); }
+  function boothWarn(msg) { console.warn(msg); sendBoothLog("warn", msg); }
+  function sendBoothLog(level, msg) {
+    try {
+      fetch(PRINT_SERVER + "/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level: level, message: String(msg) })
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   // ---------- Idle / attract ----------
   // Between guests the booth should be showing an invitation, not the last
   // person's photo. Long enough that someone admiring their strip is not
@@ -1219,16 +1236,16 @@
 
   // Diagnostic only -- tells us what the iPad actually handed back, since
   // "ideal" constraints are a preference, not a guarantee. Safe to leave on
-  // in production: console logging costs nothing a guest can see or feel.
+  // in production: logging costs nothing a guest can see or feel.
   function logCameraInfo(s) {
     var track = s.getVideoTracks()[0];
     if (!track) return;
     var settings = track.getSettings ? track.getSettings() : null;
     var caps = track.getCapabilities ? (function () { try { return track.getCapabilities(); } catch (e) { return null; } })() : null;
-    console.log("[booth camera] track.getSettings()", settings);
-    if (caps) console.log("[booth camera] track.getCapabilities()", caps);
+    boothLog("[booth camera] track.getSettings() " + JSON.stringify(settings));
+    if (caps) boothLog("[booth camera] track.getCapabilities() " + JSON.stringify(caps));
     var logVideoSize = function () {
-      console.log("[booth camera] video.videoWidth/Height", video.videoWidth, video.videoHeight);
+      boothLog("[booth camera] video.videoWidth/Height " + video.videoWidth + "x" + video.videoHeight);
     };
     if (video.videoWidth) logVideoSize(); else video.addEventListener("loadedmetadata", logVideoSize, { once: true });
   }
@@ -1315,7 +1332,7 @@
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     if (facing === "user") { ctx.translate(vw, 0); ctx.scale(-1, 1); }
     ctx.drawImage(video, 0, 0, vw, vh);
-    console.log("[booth capture] frame", vw + "x" + vh);
+    boothLog("[booth capture] frame " + vw + "x" + vh);
     return c;
   }
 
@@ -1342,7 +1359,7 @@
     if (facing === "user") { ctx.translate(w, 0); ctx.scale(-1, 1); }
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close();
-    console.log("[booth capture] still frame (takePhoto)", bw + "x" + bh, "-> stored", w + "x" + h);
+    boothLog("[booth capture] still frame (takePhoto) " + bw + "x" + bh + " -> stored " + w + "x" + h);
     return c;
   }
 
@@ -1364,7 +1381,7 @@
       return createImageBitmap(blob, { imageOrientation: "from-image" });
     }).then(bitmapToCanvas);
     return Promise.race([still, timeout]).catch(function (err) {
-      console.warn("[booth capture] still capture unavailable, using video frame instead:", err && err.message);
+      boothWarn("[booth capture] still capture unavailable, using video frame instead: " + (err && err.message));
       return grabFrame();
     });
   }
@@ -1453,8 +1470,8 @@
   function renderCurrent(isNew) {
     var canvas = renderStrip(lastImgs);
     canvas.toBlob(function (blob) {
-      console.log("[booth capture] final canvas", canvas.width + "x" + canvas.height,
-        "blob", blob.type, blob.size + " bytes");
+      boothLog("[booth capture] final canvas " + canvas.width + "x" + canvas.height +
+        " blob " + blob.type + " " + blob.size + " bytes");
       setResult(blob, "image/jpeg", isNew);
     }, "image/jpeg", 0.95);
   }
