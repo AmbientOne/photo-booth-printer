@@ -150,6 +150,10 @@ machine dedicated to the booth.
 
 Every line should read OK. It also prints the two URLs you need next.
 
+For anything `status.ps1` doesn't explain -- a guest's photo looking wrong, a
+print not showing up -- `.\logs.ps1` tails the server's log live, including
+the booth page's own camera/capture diagnostics.
+
 ### 6. Provision the iPad
 
 Once per iPad:
