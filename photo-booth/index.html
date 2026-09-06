@@ -212,7 +212,7 @@
   #setup .hint { text-align: center; color: var(--gray); font-size: 13px; margin: 0 0 26px; }
   .field { margin-bottom: 16px; }
   .field > label { display: block; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 7px; }
-  .field input[type="text"], .field input[type="tel"] {
+  .field input[type="text"], .field input[type="tel"], .field input[type="number"] {
     width: 100%; padding: 13px 14px; border-radius: 10px; border: 1px solid var(--line);
     background: rgba(255,255,255,0.03); color: var(--card); font-family: 'Jost', sans-serif; font-size: 16px;
   }
@@ -408,6 +408,7 @@
       <button class="btn exp-btn" id="btn-exp" type="button">Experimental Mode: Off</button>
 
       <div class="exp">
+        <button type="button" class="btn outline" id="preset-breakroom" style="width:100%;margin-bottom:16px">Load Preset: The Break Room (Labor Day)</button>
         <div class="field"><label>Logo</label>
           <div class="upload">
             <img class="thumb" id="logo-thumb" alt="" />
@@ -424,6 +425,15 @@
             <button type="button" class="rm" id="ov-rm">remove</button>
           </div>
           <p class="sublabel">Transparent PNG sized to the card; drawn over the whole photo.</p>
+        </div>
+        <div class="field"><div class="switch"><span>Custom strip layout</span><button type="button" class="toggle" id="tg-customlayout"></button></div></div>
+        <div id="customlayout-fields" style="display:none">
+          <div class="field"><label>Top margin (px)</label><input id="f-layout-top" type="number" min="0" /></div>
+          <div class="field"><label>Bottom margin (px)</label><input id="f-layout-bottom" type="number" min="0" /></div>
+          <div class="field"><label>Left margin (px)</label><input id="f-layout-left" type="number" min="0" /></div>
+          <div class="field"><label>Right margin (px)</label><input id="f-layout-right" type="number" min="0" /></div>
+          <div class="field"><label>Gap between photos (px)</label><input id="f-layout-gap" type="number" min="0" /></div>
+          <p class="sublabel">Measured on the final 1200x3600 canvas. Pairs with a Frame Overlay PNG that has its own background/captions baked in and transparent windows cut to match these margins -- the booth's usual border, logo, and caption text are skipped when this is on.</p>
         </div>
         <div class="field"><label>Strip Style</label>
           <div class="seg" id="seg-stripstyle">
@@ -659,7 +669,18 @@
     attract: true,
     sound: true,
     flash: true,
-    captureMode: "auto"     // auto | photo | video -- see captureFrame()
+    captureMode: "auto",    // auto | photo | video -- see captureFrame()
+    // Overrides the whole pad/gap/footer computation below with exact
+    // pixel margins on the 1200x3600 canvas, for use with a Frame Overlay PNG
+    // that already has its own background/border/captions baked in and
+    // transparent windows cut for the photos. Off by default -- every other
+    // event keeps today's computed layout untouched.
+    customLayout: false,
+    layoutTop: 0,
+    layoutBottom: 0,
+    layoutLeft: 0,
+    layoutRight: 0,
+    layoutGap: 0
   };
 
   var PRESETS = [
@@ -996,7 +1017,13 @@
       stripRadius: parseInt(getSeg("#seg-radius") || DEFAULTS.stripRadius, 10),
       stripGap: parseInt(getSeg("#seg-gap") || DEFAULTS.stripGap, 10),
       stripPad: DEFAULTS.stripPad,
-      stripFooter: getSeg("#seg-footer") || DEFAULTS.stripFooter
+      stripFooter: getSeg("#seg-footer") || DEFAULTS.stripFooter,
+      customLayout: $("#tg-customlayout").classList.contains("on"),
+      layoutTop: parseInt($("#f-layout-top").value, 10) || 0,
+      layoutBottom: parseInt($("#f-layout-bottom").value, 10) || 0,
+      layoutLeft: parseInt($("#f-layout-left").value, 10) || 0,
+      layoutRight: parseInt($("#f-layout-right").value, 10) || 0,
+      layoutGap: parseInt($("#f-layout-gap").value, 10) || 0
     };
   }
 
@@ -1043,12 +1070,38 @@
     ctx.strokeRect(inset, inset, cv.width - inset * 2, cv.height - inset * 2);
     ctx.setLineDash([]);
   }
-  ["#f-title", "#f-venue", "#f-date"].forEach(function (sel) {
+  ["#f-title", "#f-venue", "#f-date",
+   "#f-layout-top", "#f-layout-bottom", "#f-layout-left", "#f-layout-right", "#f-layout-gap"].forEach(function (sel) {
     $(sel).addEventListener("input", renderStripPreview);
   });
   function setToggle(id, on) { $(id).classList.toggle("on", !!on); }
   ["#tg-autosave", "#tg-attract", "#tg-sound", "#tg-flash"].forEach(function (id) {
     $(id).addEventListener("click", function () { this.classList.toggle("on"); });
+  });
+  $("#tg-customlayout").addEventListener("click", function () {
+    this.classList.toggle("on");
+    $("#customlayout-fields").style.display = this.classList.contains("on") ? "" : "none";
+  });
+  // One-off preset for a specific event: sets everything the Break Room
+  // overlay needs (shots, disables the built-in border/caption since the
+  // overlay draws its own, the exact measured margins, and the overlay file
+  // itself) in one click instead of five separate fields plus an upload.
+  $("#preset-breakroom").addEventListener("click", function () {
+    $("#f-title").value = "The Break Room";
+    setSeg("#seg-shots-main", "3"); setSeg("#seg-shots", "3");
+    setSeg("#seg-border", "none");
+    setSeg("#seg-footer", "none");
+    pendingOverlay = "templates/break-room-overlay.png";
+    renderUploadThumb("ov");
+    $("#tg-customlayout").classList.add("on");
+    $("#customlayout-fields").style.display = "";
+    $("#f-layout-top").value = 832;
+    $("#f-layout-bottom").value = 376;
+    $("#f-layout-left").value = 144;
+    $("#f-layout-right").value = 120;
+    $("#f-layout-gap").value = 49;
+    renderStripPreview();
+    toast("Break Room preset loaded — review, then Save & Start");
   });
   $("#btn-exp").addEventListener("click", function () {
     setExperimental(!EXPERIMENTAL);
@@ -1063,7 +1116,10 @@
     if (this.files[0]) loadScaled(this.files[0], 500, function (d) { pendingLogo = d; renderUploadThumb("logo"); });
   });
   $("#f-overlay").addEventListener("change", function () {
-    if (this.files[0]) loadScaled(this.files[0], 1080, function (d) { pendingOverlay = d; renderUploadThumb("ov"); });
+    // 3600, not 1080: the overlay is stretched across the full 1200x3600
+    // print canvas (drawOverlay), so a full-bleed background/frame design
+    // needs headroom up to the print's own longest side, not a small-logo cap.
+    if (this.files[0]) loadScaled(this.files[0], 3600, function (d) { pendingOverlay = d; renderUploadThumb("ov"); });
   });
   $("#logo-rm").addEventListener("click", function () { pendingLogo = null; $("#f-logo").value = ""; renderUploadThumb("logo"); });
   $("#ov-rm").addEventListener("click", function () { pendingOverlay = null; $("#f-overlay").value = ""; renderUploadThumb("ov"); });
@@ -1122,6 +1178,13 @@
     setToggle("#tg-attract", c.attract !== false);
     setToggle("#tg-sound", c.sound !== false);
     setToggle("#tg-flash", c.flash !== false);
+    setToggle("#tg-customlayout", !!c.customLayout);
+    $("#customlayout-fields").style.display = c.customLayout ? "" : "none";
+    $("#f-layout-top").value = c.layoutTop || DEFAULTS.layoutTop;
+    $("#f-layout-bottom").value = c.layoutBottom || DEFAULTS.layoutBottom;
+    $("#f-layout-left").value = c.layoutLeft || DEFAULTS.layoutLeft;
+    $("#f-layout-right").value = c.layoutRight || DEFAULTS.layoutRight;
+    $("#f-layout-gap").value = c.layoutGap || DEFAULTS.layoutGap;
     $("#btn-exp").classList.toggle("on", EXPERIMENTAL);
     $("#btn-exp").textContent = "Experimental Mode: " + (EXPERIMENTAL ? "On" : "Off");
     pendingLogo = c.logo || null; pendingOverlay = c.overlay || null;
@@ -1161,7 +1224,13 @@
       autosave: $("#tg-autosave").classList.contains("on"),
       attract: $("#tg-attract").classList.contains("on"),
       sound: $("#tg-sound").classList.contains("on"),
-      flash: $("#tg-flash").classList.contains("on")
+      flash: $("#tg-flash").classList.contains("on"),
+      customLayout: $("#tg-customlayout").classList.contains("on"),
+      layoutTop: parseInt($("#f-layout-top").value, 10) || 0,
+      layoutBottom: parseInt($("#f-layout-bottom").value, 10) || 0,
+      layoutLeft: parseInt($("#f-layout-left").value, 10) || 0,
+      layoutRight: parseInt($("#f-layout-right").value, 10) || 0,
+      layoutGap: parseInt($("#f-layout-gap").value, 10) || 0
     });
     applyTheme(CONFIG); applyAssets(); renderHome(); renderAttract();
     if (!ok) toast("Settings too big to save (try a smaller overlay) — applied for this session");
@@ -1689,7 +1758,13 @@
       radius: pick("stripRadius"),
       gap: pick("stripGap"),
       pad: pick("stripPad"),
-      footer: pick("stripFooter")
+      footer: pick("stripFooter"),
+      customLayout: pick("customLayout"),
+      layoutTop: pick("layoutTop"),
+      layoutBottom: pick("layoutBottom"),
+      layoutLeft: pick("layoutLeft"),
+      layoutRight: pick("layoutRight"),
+      layoutGap: pick("layoutGap")
     };
   }
 
@@ -1728,20 +1803,34 @@
     var k = W / 700;                       // design was authored 700px wide
     var d = stripDesign(designOver);
     var safe = Math.round(W * SAFE_FRACTION);
-    var pad = Math.max(safe, Math.round(d.pad * k));
-    var gap = Math.round(d.gap * k);
     var n = imgs.length;
     var hasLogo = logoImg && logoImg.complete && logoImg.naturalWidth;
 
-    var fscale = 0.78 * k;                 // keeps footer text proportional
-    var footerH;
-    if (d.footer === "none") footerH = hasLogo ? Math.round(150 * k) : safe;
-    else if (d.footer === "compact") footerH = Math.round((hasLogo ? 230 : 150) * k);
-    else footerH = Math.round((hasLogo ? 300 : 230) * k);
-    footerH = Math.max(footerH, safe);
+    // Custom layout: an overlay PNG supplies its own background, border, and
+    // captions with transparent windows already cut for the photos, so the
+    // margins here only need to match those windows exactly -- not the
+    // computed pad/footer layout below, which this bypasses entirely.
+    var padTop, padBottom, padLeft, padRight, gap;
+    if (d.customLayout) {
+      padTop = Number(d.layoutTop) || 0;
+      padBottom = Number(d.layoutBottom) || 0;
+      padLeft = Number(d.layoutLeft) || 0;
+      padRight = Number(d.layoutRight) || 0;
+      gap = Number(d.layoutGap) || 0;
+    } else {
+      var pad = Math.max(safe, Math.round(d.pad * k));
+      padTop = pad; padLeft = pad; padRight = pad;
+      gap = Math.round(d.gap * k);
+      var footerH;
+      if (d.footer === "none") footerH = hasLogo ? Math.round(150 * k) : safe;
+      else if (d.footer === "compact") footerH = Math.round((hasLogo ? 230 : 150) * k);
+      else footerH = Math.round((hasLogo ? 300 : 230) * k);
+      padBottom = Math.max(footerH, safe);
+    }
 
-    var photoW = W - pad * 2;
-    var photoH = Math.floor((H - pad - footerH - (n - 1) * gap) / n);
+    var fscale = 0.78 * k;                 // keeps footer text proportional
+    var photoW = W - padLeft - padRight;
+    var photoH = Math.floor((H - padTop - padBottom - (n - 1) * gap) / n);
     var radius = Math.round(d.radius * k);
 
     var c = document.createElement("canvas"); c.width = W; c.height = H;
@@ -1749,7 +1838,7 @@
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = theme.card; ctx.fillRect(0, 0, W, H);
 
-    if (d.border !== "none") {
+    if (!d.customLayout && d.border !== "none") {
       ctx.strokeStyle = theme.border;
       ctx.lineWidth = Math.round(2.5 * k);
       ctx.strokeRect(safe, safe, W - safe * 2, H - safe * 2);
@@ -1760,17 +1849,19 @@
       }
     }
 
-    var y = pad;
+    var y = padTop;
     imgs.forEach(function (img) {
-      drawPhoto(ctx, img, pad, y, photoW, photoH, radius);
+      drawPhoto(ctx, img, padLeft, y, photoW, photoH, radius);
       y += photoH + gap;
     });
     y = y - gap;                           // bottom of the last photo
 
-    if (hasLogo) drawLogo(ctx, W / 2, y + Math.round(10 * k), Math.round(64 * k));
-    if (d.footer !== "none") {
-      var fy = y + Math.round((hasLogo ? 100 : 58) * k);
-      drawFooter(ctx, W / 2, fy, fscale, false, d.footer);
+    if (!d.customLayout) {
+      if (hasLogo) drawLogo(ctx, W / 2, y + Math.round(10 * k), Math.round(64 * k));
+      if (d.footer !== "none") {
+        var fy = y + Math.round((hasLogo ? 100 : 58) * k);
+        drawFooter(ctx, W / 2, fy, fscale, false, d.footer);
+      }
     }
     drawOverlay(ctx, W, H);
     return c;
