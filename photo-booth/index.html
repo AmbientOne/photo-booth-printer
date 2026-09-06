@@ -792,6 +792,7 @@
   var idleTimer = null;
   var galleryReturn = "home";
   var imageCapture = null;  // ImageCapture bound to the current stream's track, or null if unsupported
+  var stillPhotoOptions = null;  // { imageWidth, imageHeight } at the camera's max, or null
 
   function show(name) {
     Object.keys(screens).forEach(function (k) {
@@ -1227,11 +1228,26 @@
   // just null there and captureFrame() always uses grabFrame() instead.
   function setUpImageCapture(s) {
     imageCapture = null;
+    stillPhotoOptions = null;
     if (typeof window.ImageCapture !== "function") return;
     try {
       var track = s.getVideoTracks()[0];
       if (track) imageCapture = new ImageCapture(track);
     } catch (e) { imageCapture = null; }
+    if (!imageCapture || typeof imageCapture.getPhotoCapabilities !== "function") return;
+    // Fetched once per camera start, not per shot -- seen in production,
+    // calling takePhoto() with no arguments does NOT default to the camera's
+    // best resolution, so ask for its actual max explicitly instead of
+    // trusting whatever Safari happens to pick.
+    imageCapture.getPhotoCapabilities().then(function (caps) {
+      boothLog("[booth camera] photo capabilities " + JSON.stringify(caps));
+      var opts = {};
+      if (caps.imageWidth && caps.imageWidth.max) opts.imageWidth = caps.imageWidth.max;
+      if (caps.imageHeight && caps.imageHeight.max) opts.imageHeight = caps.imageHeight.max;
+      stillPhotoOptions = (opts.imageWidth || opts.imageHeight) ? opts : null;
+    }).catch(function (err) {
+      boothLog("[booth camera] getPhotoCapabilities unavailable: " + (err && err.message));
+    });
   }
 
   // Diagnostic only -- tells us what the iPad actually handed back, since
@@ -1364,10 +1380,19 @@
   }
 
   // Tries a true still-photo capture through ImageCapture, falling back to
-  // the video-frame grab on any unsupported browser, rejected promise, or a
-  // capture that is taking too long to risk stalling the booth. Always
-  // resolves -- callers never need their own fallback branch.
-  var STILL_CAPTURE_TIMEOUT_MS = 1200;
+  // the video-frame grab on any unsupported browser, rejected promise, a
+  // capture that is taking too long to risk stalling the booth, or -- seen in
+  // production -- a still that comes back with FEWER pixels than the video
+  // frame already has. Some Safari/hardware combinations cap takePhoto() well
+  // below what the camera's own getCapabilities() claims, so "the API worked"
+  // is not the same as "the result is actually better." Always resolves --
+  // callers never need their own fallback branch.
+  // Raised from an original 1200ms: asking for the sensor's actual max
+  // resolution (see stillPhotoOptions, set up in setUpImageCapture) can
+  // legitimately make capture itself slower than the smaller default Safari
+  // was picking before. Still bounded well under anything a guest would
+  // notice against the countdown they already sat through.
+  var STILL_CAPTURE_TIMEOUT_MS = 2500;
   function captureFrame() {
     if (!imageCapture || typeof imageCapture.takePhoto !== "function") {
       return Promise.resolve(grabFrame());
@@ -1375,11 +1400,21 @@
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject(new Error("takePhoto timed out")); }, STILL_CAPTURE_TIMEOUT_MS);
     });
-    var still = imageCapture.takePhoto().then(function (blob) {
+    var still = imageCapture.takePhoto(stillPhotoOptions || undefined).then(function (blob) {
       // "from-image" bakes in the EXIF orientation a real photo capture can
       // carry, which drawImage(video,...) never had to deal with.
       return createImageBitmap(blob, { imageOrientation: "from-image" });
-    }).then(bitmapToCanvas);
+    }).then(function (bitmap) {
+      var stillPixels = bitmap.width * bitmap.height;
+      var videoPixels = video.videoWidth * video.videoHeight;
+      if (stillPixels <= videoPixels) {
+        bitmap.close();
+        boothLog("[booth capture] still (" + bitmap.width + "x" + bitmap.height + ") is not bigger than " +
+          "the video frame (" + video.videoWidth + "x" + video.videoHeight + "), using video frame instead");
+        return grabFrame();
+      }
+      return bitmapToCanvas(bitmap);
+    });
     return Promise.race([still, timeout]).catch(function (err) {
       boothWarn("[booth capture] still capture unavailable, using video frame instead: " + (err && err.message));
       return grabFrame();
