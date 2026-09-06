@@ -1091,7 +1091,11 @@
     setSeg("#seg-shots-main", "3"); setSeg("#seg-shots", "3");
     setSeg("#seg-border", "none");
     setSeg("#seg-footer", "none");
-    pendingOverlay = "templates/break-room-overlay.png";
+    // Absolute, not relative: the booth page is reachable at "/", "/booth",
+    // and "/booth/<file>" depending on how it was opened, and a bare relative
+    // path resolves differently against each of those -- "/booth/..." is the
+    // one form that resolves correctly no matter which URL loaded the page.
+    pendingOverlay = "/booth/templates/break-room-overlay.png";
     renderUploadThumb("ov");
     $("#tg-customlayout").classList.add("on");
     $("#customlayout-fields").style.display = "";
@@ -1100,6 +1104,16 @@
     $("#f-layout-left").value = 144;
     $("#f-layout-right").value = 120;
     $("#f-layout-gap").value = 49;
+    // Load into the actual render-time image now, not just the pending
+    // upload slot -- otherwise the strip preview keeps showing whatever
+    // overlay (or none) was last saved until Save & Start, which is exactly
+    // how a broken path silently went unnoticed until reaching the review
+    // screen. Cancel (see #setup-cancel) reverts this via applyAssets() if
+    // the preset is loaded but never saved.
+    var img = new Image();
+    img.onload = function () { overlayImg = img; renderStripPreview(); };
+    img.onerror = function () { toast("Could not load the Break Room overlay file"); };
+    img.src = pendingOverlay;
     renderStripPreview();
     toast("Break Room preset loaded — review, then Save & Start");
   });
@@ -1238,6 +1252,11 @@
   });
   $("#setup-cancel").addEventListener("click", function () {
     applyTheme(CONFIG || DEFAULTS);
+    // Discards any unsaved logo/overlay swap (e.g. from a preset button) by
+    // reloading both from whatever was actually saved. Without this, leaving
+    // Setup via Cancel after previewing a new overlay would silently keep
+    // using it for every strip afterward despite never being saved.
+    applyAssets();
     renderHome();
     show("home");
   });
