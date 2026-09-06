@@ -481,6 +481,14 @@
             <button type="button" data-val="Jost" style="font-family:'Jost',sans-serif">Jost</button>
           </div>
         </div>
+        <div class="field"><label>Photo Capture</label>
+          <div class="seg" id="seg-capturemode">
+            <button type="button" data-val="auto">Auto</button>
+            <button type="button" data-val="photo">True Photo</button>
+            <button type="button" data-val="video">Video Frame</button>
+          </div>
+          <p class="sublabel">Auto uses whichever gives more detail. Force one to compare them directly.</p>
+        </div>
         <div class="field"><div class="switch"><span>Keep a copy on the booth PC</span><button type="button" class="toggle" id="tg-autosave"></button></div></div>
         <div class="field"><div class="switch"><span>Attract / idle screen</span><button type="button" class="toggle" id="tg-attract"></button></div></div>
         <div class="field"><div class="switch"><span>Shutter sound</span><button type="button" class="toggle" id="tg-sound"></button></div></div>
@@ -650,7 +658,8 @@
     autosave: true,
     attract: true,
     sound: true,
-    flash: true
+    flash: true,
+    captureMode: "auto"     // auto | photo | video -- see captureFrame()
   };
 
   var PRESETS = [
@@ -792,7 +801,6 @@
   var idleTimer = null;
   var galleryReturn = "home";
   var imageCapture = null;  // ImageCapture bound to the current stream's track, or null if unsupported
-  var stillPhotoOptions = null;  // { imageWidth, imageHeight } at the camera's max, or null
 
   function show(name) {
     Object.keys(screens).forEach(function (k) {
@@ -948,7 +956,7 @@
     return s ? s.getAttribute("data-val") : null;
   }
   ["#seg-stripstyle", "#seg-shots", "#seg-font", "#seg-capsize",
-   "#seg-venuefont", "#seg-datefont",
+   "#seg-venuefont", "#seg-datefont", "#seg-capturemode",
    "#seg-shots-main", "#seg-border", "#seg-radius", "#seg-gap", "#seg-footer"].forEach(function (id) {
     $(id).addEventListener("click", function (e) {
       var b = e.target.closest("button[data-val]"); if (!b) return;
@@ -1109,6 +1117,7 @@
     setSeg("#seg-capsize", c.captionScale || DEFAULTS.captionScale);
     setSeg("#seg-venuefont", c.venueFont || DEFAULTS.venueFont);
     setSeg("#seg-datefont", c.dateFont || DEFAULTS.dateFont);
+    setSeg("#seg-capturemode", c.captureMode || DEFAULTS.captureMode);
     setToggle("#tg-autosave", c.autosave !== false);
     setToggle("#tg-attract", c.attract !== false);
     setToggle("#tg-sound", c.sound !== false);
@@ -1141,6 +1150,7 @@
       captionScale: getSeg("#seg-capsize") || DEFAULTS.captionScale,
       venueFont: getSeg("#seg-venuefont") || DEFAULTS.venueFont,
       dateFont: getSeg("#seg-datefont") || DEFAULTS.dateFont,
+      captureMode: getSeg("#seg-capturemode") || DEFAULTS.captureMode,
       shots: parseInt(getSeg("#seg-shots-main") || getSeg("#seg-shots") || "4", 10),
       stripBorder: getSeg("#seg-border") || DEFAULTS.stripBorder,
       stripRadius: parseInt(getSeg("#seg-radius") || DEFAULTS.stripRadius, 10),
@@ -1228,23 +1238,21 @@
   // just null there and captureFrame() always uses grabFrame() instead.
   function setUpImageCapture(s) {
     imageCapture = null;
-    stillPhotoOptions = null;
     if (typeof window.ImageCapture !== "function") return;
     try {
       var track = s.getVideoTracks()[0];
       if (track) imageCapture = new ImageCapture(track);
     } catch (e) { imageCapture = null; }
     if (!imageCapture || typeof imageCapture.getPhotoCapabilities !== "function") return;
-    // Fetched once per camera start, not per shot -- seen in production,
-    // calling takePhoto() with no arguments does NOT default to the camera's
-    // best resolution, so ask for its actual max explicitly instead of
-    // trusting whatever Safari happens to pick.
+    // Diagnostic only. Explicitly requesting this reported max via
+    // takePhoto({imageWidth, imageHeight}) was tried in production and made
+    // takePhoto() fail outright on real hardware ("Internal error" / "IPC
+    // Connection closed") -- the request itself destabilizes the camera's IPC
+    // on at least this device, for no quality gain once it fails and falls
+    // back anyway. Left in only to see the gap between what a camera claims
+    // and what takePhoto() actually, safely delivers.
     imageCapture.getPhotoCapabilities().then(function (caps) {
       boothLog("[booth camera] photo capabilities " + JSON.stringify(caps));
-      var opts = {};
-      if (caps.imageWidth && caps.imageWidth.max) opts.imageWidth = caps.imageWidth.max;
-      if (caps.imageHeight && caps.imageHeight.max) opts.imageHeight = caps.imageHeight.max;
-      stillPhotoOptions = (opts.imageWidth || opts.imageHeight) ? opts : null;
     }).catch(function (err) {
       boothLog("[booth camera] getPhotoCapabilities unavailable: " + (err && err.message));
     });
@@ -1383,35 +1391,44 @@
   // the video-frame grab on any unsupported browser, rejected promise, a
   // capture that is taking too long to risk stalling the booth, or -- seen in
   // production -- a still that comes back with FEWER pixels than the video
-  // frame already has. Some Safari/hardware combinations cap takePhoto() well
-  // below what the camera's own getCapabilities() claims, so "the API worked"
-  // is not the same as "the result is actually better." Always resolves --
-  // callers never need their own fallback branch.
-  // Raised from an original 1200ms: asking for the sensor's actual max
-  // resolution (see stillPhotoOptions, set up in setUpImageCapture) can
-  // legitimately make capture itself slower than the smaller default Safari
-  // was picking before. Still bounded well under anything a guest would
-  // notice against the countdown they already sat through.
+  // frame already has. Deliberately calls takePhoto() with no arguments:
+  // explicitly requesting the camera's own reported max resolution was tried
+  // and made takePhoto() fail on every single shot in production ("Internal
+  // error" / "IPC Connection closed") -- the request itself is what destabilized
+  // the camera's IPC on that hardware, for no gain once it fails and falls
+  // back anyway.
+  //
+  // CONFIG.captureMode ("auto" | "photo" | "video", set from the experimental
+  // setup panel) lets someone at the booth force one method or the other to
+  // compare them directly, without needing the pixel-count heuristic to agree
+  // first. "auto" is the only mode used for guests by default. Always
+  // resolves -- callers never need their own fallback branch.
   var STILL_CAPTURE_TIMEOUT_MS = 2500;
   function captureFrame() {
-    if (!imageCapture || typeof imageCapture.takePhoto !== "function") {
+    var mode = (CONFIG && CONFIG.captureMode) || "auto";
+    if (mode === "video" || !imageCapture || typeof imageCapture.takePhoto !== "function") {
       return Promise.resolve(grabFrame());
     }
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject(new Error("takePhoto timed out")); }, STILL_CAPTURE_TIMEOUT_MS);
     });
-    var still = imageCapture.takePhoto(stillPhotoOptions || undefined).then(function (blob) {
+    var still = imageCapture.takePhoto().then(function (blob) {
       // "from-image" bakes in the EXIF orientation a real photo capture can
       // carry, which drawImage(video,...) never had to deal with.
       return createImageBitmap(blob, { imageOrientation: "from-image" });
     }).then(function (bitmap) {
-      var stillPixels = bitmap.width * bitmap.height;
-      var videoPixels = video.videoWidth * video.videoHeight;
-      if (stillPixels <= videoPixels) {
-        bitmap.close();
-        boothLog("[booth capture] still (" + bitmap.width + "x" + bitmap.height + ") is not bigger than " +
-          "the video frame (" + video.videoWidth + "x" + video.videoHeight + "), using video frame instead");
-        return grabFrame();
+      // Forced "photo" mode always keeps the still once it succeeds, so it
+      // can be judged on its own merits instead of the safety heuristic
+      // discarding it before anyone gets to look at it.
+      if (mode !== "photo") {
+        var stillPixels = bitmap.width * bitmap.height;
+        var videoPixels = video.videoWidth * video.videoHeight;
+        if (stillPixels <= videoPixels) {
+          bitmap.close();
+          boothLog("[booth capture] still (" + bitmap.width + "x" + bitmap.height + ") is not bigger than " +
+            "the video frame (" + video.videoWidth + "x" + video.videoHeight + "), using video frame instead");
+          return grabFrame();
+        }
       }
       return bitmapToCanvas(bitmap);
     });
